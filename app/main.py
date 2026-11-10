@@ -86,7 +86,7 @@ def process_job(job_id: str, local: Path | None, url: str, title: str, creator_i
         else:
             db.update_job(job_id, status='processando', stage='Importando link autorizado com yt-dlp')
             source = download_platform(url, work)
-        db.update_job(job_id, status='processando', stage='FFmpeg: aceleração 2.5x e conversão MP3')
+        db.update_job(job_id, status='processando', stage='FFmpeg: pitch 2.5x, EQ 100 Hz–15 kHz e MP3 sem tags ID3')
         metadata = convert_2_5x(source, EXPORTS / f'{job_id}.mp3')
         db.update_job(job_id, **metadata)
         db.update_job(job_id, status='enviando', stage='Criando asset no Roblox Open Cloud')
