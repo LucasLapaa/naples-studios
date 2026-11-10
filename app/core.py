@@ -125,9 +125,12 @@ def download_platform(url: str, workdir: Path) -> Path:
     workdir.mkdir(parents=True, exist_ok=True)
     output_pattern = str(workdir / 'fonte.%(ext)s')
     # Apenas URLs permitidas, sem cookies, sem autenticação automática, sem playlists.
+    # Não usar --max-downloads 1: yt-dlp pode retornar exit status 101 mesmo
+    # tendo concluído o primeiro arquivo, que o wrapper interpretaria como erro.
+    # --no-playlist restringe a um só item; verificamos o único arquivo ao final.
     # EJS é instalado localmente via yt-dlp[default]; não baixa scripts arbitrários.
     command = [
-        'yt-dlp', '--ignore-config', '--no-playlist', '--max-downloads', '1',
+        'yt-dlp', '--ignore-config', '--no-playlist',
         '--no-progress', '--js-runtimes', 'node', '--no-write-info-json',
         '--no-write-thumbnail', '--no-part', '--restrict-filenames',
         '--abort-on-unavailable-fragments', '--max-filesize', '50M',
