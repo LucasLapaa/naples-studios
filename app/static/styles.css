@@ -67,3 +67,14 @@
 @media(max-width:750px){.naples-batch-panel{padding:16px}.naples-batch-head{align-items:flex-start}.naples-batch-count{font-size:1.4rem}.naples-batch-free{align-self:flex-start}.naples-batch-result{align-items:flex-start}}
 
 .naples-publish-target{padding:14px 18px;margin:8px 0 18px;border:1px solid #2c6853;border-radius:12px;background:#10291f;color:#a6ecca;font-size:14px}.naples-publish-target a{color:#62f0b1;text-decoration:underline}
+
+/* Naples v10 — conexão simples da Roblox Key pelo dashboard */
+.naples-connect-form{display:flex;flex-direction:column;gap:12px;margin:16px 0}
+.naples-connect-form input{width:100%;padding:14px 15px;border:1px solid #376b49;background:#071b11;color:#effff3;border-radius:12px;font-size:14px;box-sizing:border-box}
+.naples-connect-form input:focus{outline:2px solid #72f3a2;outline-offset:1px}
+.naples-group-choice{display:flex;flex-direction:column;gap:10px}
+.naples-group-choice[hidden]{display:none}
+#disconnectRobloxBtn{margin:0 9px 10px 0}
+
+.naples-group-option{display:flex;gap:10px;align-items:center;color:#b5e3c4;font-size:13px}
+.naples-group-option input{width:17px;flex:none;accent-color:#72f3a2}

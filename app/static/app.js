@@ -49,7 +49,7 @@ function showLogin(){
   $('appView').hidden=true;
   $('loginView').hidden=false;
   const msg=new URLSearchParams(location.search).get('login_error');
-  const texts={cancelado:'Login cancelado. Autorize o acesso no Discord para continuar.',discord:'Falha ao validar a autenticação no Discord. Tente novamente.',acesso:'Sua conta Discord não está autorizada. Solicite acesso ao administrador.'};
+  const texts={cancelado:'Login cancelado. Autorize o acesso no Discord para continuar.',discord:'Falha ao validar a autenticação no Discord. Tente novamente.',acesso:'Sua conta Discord não está autorizada. Solicite acesso ao administrador.',config:'O Discord OAuth2 ainda não foi configurado no servidor. O proprietário precisa cadastrar a aplicação uma única vez.'};
   $('loginError').textContent=texts[msg]||'';
   $('loginError').hidden=!texts[msg];
 }
@@ -64,7 +64,7 @@ function showApp(profile, config){
     image.referrerPolicy='no-referrer';image.onerror=()=>{avatar.textContent=(profile.username||'N').charAt(0).toUpperCase();};
     avatar.appendChild(image);
   }else avatar.textContent=(profile.username||'N').charAt(0).toUpperCase();
-  const configuredTarget = `${config.creator_type==='group'?'Grupo':'Usuário'} Roblox #${config.creator_id||'não configurado'}`;
+  const configuredTarget = config.roblox_connected ? `${config.creator_type==='group'?'Grupo':'Usuário'} Roblox #${config.creator_id}` : 'Roblox não conectado — cole sua Key em Roblox Key';
   $('uploadTargetNotice').textContent=`Destino automático: ${configuredTarget}. Altere somente em Roblox Key.`;
   $('batchTargetNotice').textContent=`Destino automático do lote: ${configuredTarget}. Altere somente em Roblox Key.`;
   if(!config.platform_links){
@@ -252,13 +252,13 @@ document.querySelectorAll('.nav-item').forEach(link=>link.addEventListener('clic
   link.classList.add('active');
 }));
 async function init(){
-  try{const status=await api('/api/setup/status');if(!status.bootstrapped||!status.ready){location.replace('/configuracoes');return;}}catch(e){console.warn('Falha ao consultar status inicial');}
   try{
     const result=await api('/api/session');
     csrf=result.csrf;
     showApp(result.user,result.config);
     await fetchJobs();
     await Promise.all([fetchCollections(),loadConnection()]);
+    if(!result.config.roblox_connected && !sessionStorage.getItem('naples-key-tip')){sessionStorage.setItem('naples-key-tip','1');location.hash='#roblox-key';toast('Bem-vindo! Conecte sua Roblox Key para começar a publicar.');}
   }catch(e){showLogin();}
   setInterval(()=>{
     if(authorized && jobs.some(j=>activeStatuses.has(j.status)))fetchJobs();
@@ -295,6 +295,8 @@ async function loadConnection(){
     $('robloxConnectionTitle').textContent=d.configured?'Chave configurada':'Configuração pendente';
     $('robloxConnectionDetail').textContent=`Destino padrão: ${d.creator_type==='group'?'Grupo':'Usuário'} Roblox #${d.creator_id||'—'}`;
     $('keyConnectedChip').textContent=d.configured?'CONFIGURADA':'PENDENTE';
+    $('disconnectRobloxBtn').hidden=!d.configured;
+    if(d.configured){$('uploadTargetNotice').textContent=`Destino automático: ${d.creator_type==='group'?'Grupo':'Usuário'} Roblox #${d.creator_id}`; $('batchTargetNotice').textContent=`Destino automático do lote: ${d.creator_type==='group'?'Grupo':'Usuário'} Roblox #${d.creator_id}`;}
   }catch(e){$('robloxConnectionDetail').textContent='Não foi possível consultar a conexão.';}
 }
 function renderMonitor(){
@@ -491,4 +493,32 @@ $('batchForm').addEventListener('submit',async(e)=>{
     await fetchJobs();
   }catch(err){toast(err.message,true);}
   finally{batchFileUploading=false;button.disabled=false;label.textContent='ADICIONAR LOTE À FILA';}
+});
+
+
+// v10 — operação individual: conectar a Roblox Key sem configurar o .env ou ID manualmente.
+$('robloxKeyForm').addEventListener('submit',async event=>{
+  event.preventDefault();
+  const button=$('saveRobloxKeyBtn');button.disabled=true;button.textContent='VALIDANDO COM ROBLOX...';
+  try{
+    const body={api_key:$('robloxKeyInput').value.trim()};
+    if($('useRobloxGroup').checked){body.creator_type='group';body.creator_id=$('robloxGroupId').value.trim();}
+    const res=await api('/api/roblox/connection',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    $('robloxKeyInput').value='';$('useRobloxGroup').checked=false;$('groupChoice').hidden=true;
+    $('robloxKeyFeedback').textContent=`✓ ${res.message} Destino: ${res.creator_type==='group'?'Grupo':'Usuário'} #${res.creator_id}`;
+    await loadConnection();toast('Sua Roblox Key está conectada. Pode enviar músicas!');
+  }catch(err){
+    $('robloxKeyFeedback').textContent=err.message;
+    if(err.message.includes('grupo')){$('useRobloxGroup').checked=true;$('groupChoice').hidden=false;}
+    toast(err.message,true);
+  }finally{button.disabled=false;button.textContent='VALIDAR E CONECTAR ↗';}
+});
+$('disconnectRobloxBtn').addEventListener('click',async()=>{
+  if(!confirm('Desconectar sua Roblox Key deste usuário Discord?'))return;
+  try{await api('/api/roblox/connection',{method:'DELETE'});await loadConnection();toast('Chave pessoal desconectada.');}
+  catch(err){toast(err.message,true);}
+});
+
+$('useRobloxGroup').addEventListener('change',event=>{
+  $('groupChoice').hidden=!event.target.checked;
 });
