@@ -3,7 +3,7 @@
   "rewrites": [
     {
       "source": "/:path*",
-      "destination": "https://TROQUE-PELO-SEU-DOMINIO.up.railway.app/:path*"
+      "destination": "naples-studios-production.up.railway.app/:path*"
     }
   ]
 }
