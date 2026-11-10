@@ -24,7 +24,7 @@ from .asset_monitor import inspect_asset
 from .roblox_key import inspect_key, KeyInspectionError, allowed_destination
 from .core import (
     MAX_FILE_BYTES, ProcessingError, PlatformAccessError, convert_2_5x, create_roblox_asset,
-    download_platform, platform_from_url, preview_platform, poll_roblox_asset, valid_creator_id, valid_title
+    download_platform, platform_from_url, preview_platform, poll_roblox_asset, source_reference_for_history, valid_creator_id, valid_title
 )
 
 EXPORTS = config.DATA / 'exports'
@@ -639,6 +639,13 @@ def system_diagnostics(request: Request):
             versions[tool] = (raw[0][:110] if raw and proc.returncode == 0 else 'erro')
         except (FileNotFoundError, __import__('subprocess').TimeoutExpired):
             versions[tool] = 'indisponível'
+    try:
+        from importlib.metadata import version, PackageNotFoundError
+        versions['yt-dlp-ejs'] = version('yt-dlp-ejs')
+    except PackageNotFoundError:
+        versions['yt-dlp-ejs'] = 'não instalado (verifique yt-dlp[default])'
+    except Exception:
+        versions['yt-dlp-ejs'] = 'não foi possível determinar'
     versions['nota'] = 'Ferramentas instaladas não garantem que sites externos permitirão downloads.'
     return versions
 
@@ -725,7 +732,7 @@ async def submit_job(request: Request, title: str = Form(...), creator_id: str =
         except Exception:
             shutil.rmtree(work, ignore_errors=True)
             raise
-    db.create_job(job_id, user['discord_id'], title, platform, url if url else (audio_file.filename or 'arquivo'), creator_id, creator_type, batch_id or None)
+    db.create_job(job_id, user['discord_id'], title, platform, source_reference_for_history(url) if url else (audio_file.filename or 'arquivo'), creator_id, creator_type, batch_id or None)
     task = asyncio.create_task(run_job(job_id, local, url, title, creator_id, creator_type, api_key))
     TASKS.add(task)
     task.add_done_callback(TASKS.discard)
@@ -774,7 +781,8 @@ async def submit_link_batch(request: Request):
     except ProcessingError as exc:
         raise HTTPException(400,str(exc)) from exc
     batch_id=uuid.uuid4().hex
-    db.create_batch_jobs(user['discord_id'], batch_id, records, cid, ctype)
+    db.create_batch_jobs(user['discord_id'], batch_id,
+        [{**rec, 'url': source_reference_for_history(rec['url'])} for rec in records], cid, ctype)
     for item in records:
         task=asyncio.create_task(run_job(item['id'], None, item['url'], item['title'], cid, ctype, api_key))
         TASKS.add(task)

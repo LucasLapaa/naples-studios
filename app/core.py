@@ -7,7 +7,7 @@ import time
 import logging
 import shutil
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 import httpx
 
@@ -91,22 +91,101 @@ def valid_title(raw):
         raise ProcessingError('Título deve conter entre 3 e 80 caracteres.')
     return val
 
+def _direct_audio_host(host: str) -> bool:
+    """Somente provedores conhecidos de object storage público/URL assinada.
+
+    Não aceitamos destinos arbitrários de rede nem redirecionamentos para evitar SSRF.
+    A lista não concede permissão para copiar conteúdo de terceiros.
+    """
+    if host == 'storage.googleapis.com' or host.endswith('.storage.googleapis.com'):
+        return True
+    if host.startswith('pub-') and host.endswith('.r2.dev') and host.count('.') == 2:
+        return True
+    if host == 's3.amazonaws.com' or re.fullmatch(r's3[.-][a-z0-9-]+\.amazonaws\.com', host):
+        return True
+    if re.fullmatch(r'[a-z0-9.-]+\.s3[.-][a-z0-9-]+\.amazonaws\.com', host):
+        return True
+    if host.endswith('.blob.core.windows.net') and host.count('.') == 4:
+        return True
+    if host.endswith('.digitaloceanspaces.com') and host.count('.') >= 2:
+        return True
+    return False
+
+
 def platform_from_url(value):
     try:
         parsed = urlparse(value)
         if parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password or parsed.port:
             raise ValueError()
         host = parsed.hostname.lower().rstrip('.')
-        allowed = {
-            'youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com',
-            'youtu.be', 'www.youtu.be', 'soundcloud.com', 'www.soundcloud.com',
-            'on.soundcloud.com',
-        }
-        if host not in allowed or len(value) > 2000:
+        youtube = {'youtube.com','www.youtube.com','m.youtube.com','music.youtube.com','youtu.be','www.youtu.be'}
+        soundcloud = {'soundcloud.com','www.soundcloud.com','on.soundcloud.com'}
+        if len(value) > 3000 or any(ord(c) < 32 for c in value):
             raise ValueError()
-        return 'YouTube' if 'youtu' in host else 'SoundCloud'
+        if host in youtube:
+            return 'YouTube'
+        if host in soundcloud:
+            return 'SoundCloud'
+        if _direct_audio_host(host):
+            return 'Arquivo HTTPS'
+        raise ValueError()
     except (ValueError, TypeError):
-        raise ProcessingError('Use somente um link HTTPS válido do YouTube ou SoundCloud.')
+        raise ProcessingError('Use um link HTTPS do YouTube/SoundCloud ou um link direto de arquivo em R2, S3, GCS, Azure Blob ou Spaces.')
+
+
+def source_reference_for_history(url: str) -> str:
+    """Não armazena tokens de assinatura de links de arquivos."""
+    if platform_from_url(url) == 'Arquivo HTTPS':
+        p = urlparse(url)
+        return urlunparse((p.scheme, p.netloc, p.path, '', '', ''))[:1000]
+    return url[:1000]
+
+
+def download_direct_audio(url: str, workdir: Path, client=None) -> Path:
+    """Baixa exclusivamente objetos públicos/autorizados de provedores conhecidos.
+
+    Sem cookies, sem seguir redirects, com tamanho máximo de 50 MB. Arquivo obtido
+    é validado pelo ffprobe/FFmpeg posteriormente; não confia na extensão.
+    """
+    if platform_from_url(url) != 'Arquivo HTTPS':
+        raise ProcessingError('O endereço não é um link direto de áudio autorizado.')
+    owns_client = client is None
+    if owns_client:
+        client = httpx.Client(timeout=httpx.Timeout(40.0, connect=10.0), follow_redirects=False, trust_env=False)
+    workdir.mkdir(parents=True, exist_ok=True)
+    target = workdir / 'fonte.media'
+    total = 0
+    try:
+        with client.stream('GET', url, headers={'Accept':'audio/*,application/octet-stream,video/webm,application/ogg'}) as response:
+            if response.status_code in (301,302,303,307,308):
+                raise PlatformAccessError('O link redirecionou. Cole a URL final direta do arquivo, emitida pelo seu armazenamento.', 'DIRECT_REDIRECT')
+            if response.status_code >= 400:
+                raise PlatformAccessError(f'Arquivo HTTPS indisponível (HTTP {response.status_code}). Verifique se o link está válido e liberado para download.', 'DIRECT_HTTP')
+            length = response.headers.get('content-length','')
+            if length.isdigit() and int(length) > MAX_FILE_BYTES:
+                raise PlatformAccessError('O arquivo original excede 50 MB.', 'DIRECT_TOO_LARGE')
+            content_type = response.headers.get('content-type','').split(';')[0].strip().lower()
+            if content_type.startswith('text/') or content_type in ('application/json','application/xml','text/html'):
+                raise PlatformAccessError('O endereço retornou uma página/texto em vez de um arquivo de áudio.', 'DIRECT_NOT_AUDIO')
+            with target.open('wb') as destination:
+                for chunk in response.iter_bytes(chunk_size=256*1024):
+                    if chunk:
+                        total += len(chunk)
+                        if total > MAX_FILE_BYTES:
+                            raise PlatformAccessError('O arquivo original excede 50 MB.', 'DIRECT_TOO_LARGE')
+                        destination.write(chunk)
+        if not total:
+            raise PlatformAccessError('O endereço retornou um arquivo vazio.', 'DIRECT_EMPTY')
+        return target
+    except httpx.RequestError as exc:
+        raise PlatformAccessError(f'Falha ao conectar ao armazenamento do arquivo ({type(exc).__name__}).', 'DIRECT_NETWORK') from exc
+    except Exception:
+        target.unlink(missing_ok=True)
+        raise
+    finally:
+        if owns_client:
+            client.close()
+
 
 def run(cmd, timeout):
     try:
@@ -122,6 +201,8 @@ def run(cmd, timeout):
 
 def download_platform(url: str, workdir: Path) -> Path:
     platform = platform_from_url(url)
+    if platform == 'Arquivo HTTPS':
+        return download_direct_audio(url, workdir)
     workdir.mkdir(parents=True, exist_ok=True)
     output_pattern = str(workdir / 'fonte.%(ext)s')
     # Apenas URLs permitidas, sem cookies, sem autenticação automática, sem playlists.
@@ -157,42 +238,69 @@ def download_platform(url: str, workdir: Path) -> Path:
         raise PlatformAccessError('O arquivo da plataforma supera 50 MB. Envie um arquivo menor.')
     return source
 
-def preview_platform(url: str) -> dict:
-    """Busca apenas metadados de uma faixa pública. Não baixa áudio.
+def _oembed_preview(url: str, platform: str, client=None) -> dict:
+    """Metadata pública; não libera nem baixa o áudio do YouTube/SoundCloud."""
+    endpoint = ('https://www.youtube.com/oembed' if platform == 'YouTube'
+                else 'https://soundcloud.com/oembed')
+    owns_client = client is None
+    if owns_client:
+        client = httpx.Client(timeout=httpx.Timeout(9.0, connect=4.0), follow_redirects=False, trust_env=False)
+    try:
+        response = client.get(endpoint, params={'url': url, 'format': 'json'})
+        if response.status_code != 200 or len(response.content) > 120_000:
+            raise ValueError('Metadados indisponíveis')
+        data = response.json()
+        title = str(data.get('title','')).strip()[:120]
+        if not title:
+            raise ValueError('Título ausente')
+        return {
+            'platform': platform, 'title': title, 'duration': None,
+            'uploader': str(data.get('author_name') or '')[:100],
+            'note': 'Prévia pública (oEmbed); NÃO confirma acesso ao áudio. O download pode exigir verificação.'
+        }
+    finally:
+        if owns_client:
+            client.close()
 
-    Não usa cookies nem contorna exigência de login/verificação da origem.
-    """
+
+def preview_platform(url: str) -> dict:
+    """Prévia rápida por metadados públicos, sem baixar mídia."""
     platform = platform_from_url(url)
+    if platform == 'Arquivo HTTPS':
+        raw_name = urlparse(url).path.rsplit('/',1)[-1] or 'Áudio hospedado'
+        raw_name = re.sub(r'[^\w .()\-]', '_', raw_name, flags=re.UNICODE).strip()
+        return {'platform': platform, 'title': (raw_name or 'Áudio hospedado')[:120],
+                'duration': None, 'uploader':'',
+                'note':'Arquivo direto; o acesso e o codec serão validados no envio.'}
+    try:
+        return _oembed_preview(url, platform)
+    except (ValueError, httpx.RequestError, json.JSONDecodeError) as exc:
+        log.info('Prévia pública %s indisponível: %s', platform, type(exc).__name__)
+    # Fallback apenas para metadados, sem baixar áudio.
     command = [
         'yt-dlp', '--ignore-config', '--no-playlist',
         '--skip-download', '--dump-single-json', '--no-warnings',
-        '--js-runtimes', 'node', '--socket-timeout', '12',
-        '--retries', '1', '--no-write-info-json', '--', url,
+        '--js-runtimes', 'node', '--socket-timeout', '8',
+        '--retries', '0', '--no-write-info-json', '--', url,
     ]
     try:
-        raw = run(command, 45)
+        raw = run(command, 25)
         if len(raw) > 2_000_000:
             raise ProcessingError('Metadados maiores do que o esperado.')
         payload = json.loads(raw)
-        if not isinstance(payload, dict) or payload.get('_type') in ('playlist', 'multi_video'):
-            raise ProcessingError('Envie um link de uma única música, não uma playlist.')
-        title = str(payload.get('title') or '').strip()[:120]
-        if not title:
-            title = 'Música sem título informado'
+        if not isinstance(payload, dict) or payload.get('_type') in ('playlist','multi_video'):
+            raise ProcessingError('Envie um link de uma música, não uma playlist.')
+        title = str(payload.get('title') or '').strip()[:120] or 'Música sem título informado'
         duration = payload.get('duration')
-        duration = round(float(duration), 1) if isinstance(duration, (int, float)) and 0 < duration < 100000 else None
-        return {
-            'platform': platform, 'title': title,
-            'duration': duration,
-            'uploader': str(payload.get('uploader') or '')[:100],
-            'note': 'Prévia informativa. O download depende da autorização e da disponibilidade na plataforma.'
-        }
+        duration = round(float(duration),1) if isinstance(duration,(int,float)) and 0 < duration < 100000 else None
+        return {'platform':platform,'title':title,'duration':duration,
+                'uploader':str(payload.get('uploader') or '')[:100],
+                'note':'Metadados disponíveis. O download pode exigir autorização ou verificação da plataforma.'}
     except (ProcessingError, ValueError, TypeError, json.JSONDecodeError) as exc:
         if isinstance(exc, ProcessingError) and str(exc).startswith('Ferramenta yt-dlp não instalada'):
             raise PlatformAccessError('O yt-dlp não está instalado no servidor.') from exc
         code = source_error_code(platform, str(exc))
-        log.warning('Falha de prévia | plataforma=%s | codigo=%s | erro=%s',
-                    platform, code, safe_debug(str(exc)))
+        log.warning('Falha de prévia | plataforma=%s | codigo=%s | erro=%s', platform, code, safe_debug(str(exc)))
         raise PlatformAccessError(f'[{code}] {source_failure_message(platform, code)}', code=code) from exc
 
 
