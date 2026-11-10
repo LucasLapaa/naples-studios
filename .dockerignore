@@ -1,0 +1,12 @@
+data/
+.venv/
+.git/
+.pytest_cache/
+__pycache__/
+*.pyc
+.env
+.env.*
+*.sqlite3*
+*.key
+preview-*.png
+vercel-gateway/

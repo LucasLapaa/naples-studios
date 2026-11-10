@@ -1,0 +1,16 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+data/*.sqlite3
+data/*.sqlite3-*
+data/tmp/*
+!data/tmp/.gitkeep
+data/exports/*
+!data/exports/.gitkeep
+
+data/.naples-master.key
+data/.naples-setup-code
+data/*.sqlite3-shm
+data/*.sqlite3-wal

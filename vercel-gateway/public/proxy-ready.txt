@@ -1,0 +1,1 @@
+Naples Studios Vercel gateway — configuration-only project.
