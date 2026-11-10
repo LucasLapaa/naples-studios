@@ -18,6 +18,58 @@ MAX_DURATION = 7 * 60
 class ProcessingError(Exception):
     pass
 
+class PlatformAccessError(ProcessingError):
+    """Fonte recusou importação; não confundir com falha de FFmpeg ou Roblox."""
+
+
+def explain_platform_failure(platform: str, message: str) -> str:
+    """Converte stderr do extrator em texto seguro, claro e sem credenciais/URLs.
+
+    Não tenta contornar CAPTCHA, login, DRM ou outras restrições da plataforma.
+    """
+    msg = (message or '').lower()
+    if any(x in msg for x in (
+        'sign in to confirm you', 'not a bot', 'confirm you’re not a bot',
+        "confirm you're not a bot", 'captcha', 'unusual traffic',
+    )):
+        return ('O YouTube solicitou verificação de acesso automatizado e bloqueou '
+                'a importação pelo servidor. Atualizar o extrator pode não resolver. '
+                'Use o upload de um arquivo próprio ou obtido com autorização.')
+    if any(x in msg for x in ('private video', 'private track', 'this video is private',
+                             'this track is private', 'login required', 'requires login',
+                             'sign in to view', 'members-only', 'age-restricted')):
+        return (f'O conteúdo no {platform} exige login ou permissão adicional. '
+                'O Naples Studios não acessa conteúdo privado ou restrito. '
+                'Envie um arquivo que você tenha autorização para usar.')
+    if any(x in msg for x in ('http error 429', 'too many requests', 'rate limit',
+                             'rate-limit', 'request limit exceeded')):
+        return (f'O {platform} limitou temporariamente as solicitações desta conexão. '
+                'Não tente repetidamente agora; use um arquivo local autorizado.')
+    if any(x in msg for x in ('geo-restricted', 'not available in your country',
+                             'not available in your region', 'geoblocked')):
+        return (f'O {platform} restringe este conteúdo para a região do servidor. '
+                'Use outro conteúdo permitido ou um arquivo local autorizado.')
+    if any(x in msg for x in ('http error 401', 'http error 403', 'forbidden', 'unauthorized')):
+        return (f'O {platform} negou acesso à mídia (HTTP 401/403). '
+                'Confirme se o conteúdo está público e disponível para reutilização.')
+    if any(x in msg for x in ('http error 404', 'video unavailable', 'track unavailable',
+                             'not found', 'has been removed', 'does not exist')):
+        return (f'O link no {platform} não está disponível. Confira se a URL existe '
+                'e se o autor permite acessar o conteúdo.')
+    if any(x in msg for x in ('unsupported url', 'no video formats found',
+                             'requested format is not available', 'no formats found')):
+        return (f'O {platform} não ofereceu um formato de áudio compatível neste link. '
+                'Atualize o yt-dlp ou envie um arquivo local autorizado.')
+    if any(x in msg for x in ('timed out', 'connection reset', 'temporary failure',
+                             'network is unreachable', 'http error 500', 'http error 502',
+                             'http error 503', 'http error 504')):
+        return (f'Falha temporária de conexão ao {platform}. '
+                'Tente novamente mais tarde ou use arquivo local.')
+    return (f'Não foi possível importar o link do {platform}. '
+            'Verifique se é público, acessível e autorizado para uso; '
+            'caso contrário utilize o envio de arquivo local. Consulte logs do Railway '
+            'para diagnóstico técnico (não compartilhe credenciais).')
+
 def valid_creator_id(raw):
     val = str(raw or '').strip()
     if not re.fullmatch(r'[1-9][0-9]{0,19}', val):
@@ -60,23 +112,34 @@ def run(cmd, timeout):
     return r.stdout.strip()
 
 def download_platform(url: str, workdir: Path) -> Path:
-    platform_from_url(url)
+    platform = platform_from_url(url)
+    workdir.mkdir(parents=True, exist_ok=True)
     output_pattern = str(workdir / 'fonte.%(ext)s')
-    # Sem cookies, sem bypass de DRM/autenticação, sem playlists.
-    run([
-        'yt-dlp', '--ignore-config', '--no-playlist', '--no-progress',
-        '--js-runtimes', 'node',
-        '--no-write-info-json', '--no-write-thumbnail', '--no-part',
-        '--restrict-filenames', '--max-filesize', '50M', '--socket-timeout', '15',
-        '--retries', '1', '--fragment-retries', '1', '--format', 'bestaudio/best',
-        '--output', output_pattern, '--', url
-    ], 180)
+    # Apenas URLs permitidas, sem cookies, sem autenticação automática, sem playlists.
+    # EJS é instalado localmente via yt-dlp[default]; não baixa scripts arbitrários.
+    command = [
+        'yt-dlp', '--ignore-config', '--no-playlist', '--max-downloads', '1',
+        '--no-progress', '--js-runtimes', 'node', '--no-write-info-json',
+        '--no-write-thumbnail', '--no-part', '--restrict-filenames',
+        '--abort-on-unavailable-fragments', '--max-filesize', '50M',
+        '--socket-timeout', '15', '--retries', '2', '--fragment-retries', '2',
+        '--retry-sleep', 'http:exp=1:8', '--retry-sleep', 'fragment:exp=1:8',
+        '--format', 'bestaudio/best', '--output', output_pattern,
+        '--', url,
+    ]
+    try:
+        run(command, 180)
+    except ProcessingError as exc:
+        # Nunca publica os logs brutos do yt-dlp, URLs privadas ou dados de sessão.
+        if str(exc).startswith('Ferramenta yt-dlp não instalada'):
+            raise PlatformAccessError('O yt-dlp não está instalado no servidor. Refaça o deploy do Dockerfile.') from exc
+        raise PlatformAccessError(explain_platform_failure(platform, str(exc))) from exc
     files = [p for p in workdir.glob('fonte.*') if p.is_file()]
     if len(files) != 1:
-        raise ProcessingError('O serviço não entregou um arquivo de áudio utilizável.')
+        raise PlatformAccessError('A plataforma não entregou um único arquivo de áudio utilizável. Tente upload local.')
     source = files[0]
     if source.stat().st_size > MAX_FILE_BYTES:
-        raise ProcessingError('Arquivo de origem maior que 50 MB.')
+        raise PlatformAccessError('O arquivo da plataforma supera 50 MB. Envie um arquivo menor.')
     return source
 
 def duration_seconds(path: Path) -> float:
