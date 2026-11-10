@@ -93,27 +93,78 @@ def duration_seconds(path: Path) -> float:
     return duration
 
 def convert_2_5x(source: Path, output: Path) -> dict:
+    """Acelera áudio em 2.5x COM pitch, aplica EQ e limpa metadados.
+
+    MP3: saída padrão utilizada pelo painel Naples Studios.
+    OGG: suportado para processamento manual ou futuras versões do painel.
+    Nenhuma opção desta função contorna moderação ou copyright do Roblox.
+    """
+    source = Path(source)
+    output = Path(output)
+    if not source.is_file():
+        raise ProcessingError('Arquivo de origem não encontrado.')
+    if source.resolve() == output.resolve():
+        raise ProcessingError('A origem e a saída precisam ser arquivos diferentes.')
     if source.stat().st_size > MAX_FILE_BYTES:
         raise ProcessingError('Arquivo de origem maior que 50 MB.')
+
+    fmt = output.suffix.lower()
+    if fmt == '.mp3':
+        # Remoção explícita de tags ID3v1 e ID3v2.
+        encoder = ['-c:a', 'libmp3lame', '-b:a', '160k',
+                   '-id3v2_version', '0', '-write_id3v1', '0']
+    elif fmt == '.ogg':
+        encoder = ['-c:a', 'libvorbis', '-qscale:a', '5']
+    else:
+        raise ProcessingError('Formato final deve ser .mp3 ou .ogg.')
+
     original_duration = duration_seconds(source)
-    if original_duration / 2.5 > MAX_DURATION:
-        raise ProcessingError('Após aceleração, o áudio ultrapassaria 7 minutos do Roblox.')
-    # Acelera tempo e tom 2,5x: quando Roblox usar PlaybackSpeed=0.4, volta ao original.
-    # ATENÇÃO: atempo sozinho preservaria o tom e NÃO compensaria a queda de pitch no Roblox.
-    run([
-        'ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'error', '-y',
-        '-i', str(source), '-map', '0:a:0', '-vn', '-sn', '-dn',
-        '-af', 'aresample=44100,asetrate=110250,aresample=44100', '-ar', '44100', '-ac', '2',
-        '-c:a', 'libmp3lame', '-b:a', '160k', '-map_metadata', '-1', str(output)
-    ], 160)
-    if not output.exists() or not output.stat().st_size:
-        raise ProcessingError('Falha ao gerar o MP3.')
-    if output.stat().st_size >= MAX_OUTPUT_BYTES:
-        raise ProcessingError('Áudio final tem 20 MB ou mais; reduza a duração.')
-    final_duration = duration_seconds(output)
-    if final_duration > MAX_DURATION:
-        raise ProcessingError('Duração final excede os 7 minutos permitidos pelo Roblox.')
-    return {'original_duration': round(original_duration, 1), 'final_duration': round(final_duration, 1), 'size_bytes': output.stat().st_size}
+    if original_duration / 2.5 >= MAX_DURATION:
+        raise ProcessingError('Após aceleração, o áudio precisa ter menos de 7 minutos.')
+
+    # 1. Padroniza a ENTRADA em 44100 Hz, independentemente da taxa original.
+    # 2. asetrate reinterpreta as amostras como 110250 Hz (= 44100 x 2.5),
+    #    acelerando tempo e pitch juntos — sem o filtro atempo.
+    # 3. Reamostra para 44100 Hz para gerar um arquivo normalizado.
+    # 4. Aplica EQ sobre o ÁUDIO FINAL (Hz após a mudança de pitch).
+    audio_filters = (
+        'aresample=44100,'
+        'asetrate=110250,'
+        'aresample=44100,'
+        'highpass=f=100,'
+        'lowpass=f=15000'
+    )
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        run([
+            'ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'error', '-y',
+            '-i', str(source),
+            '-map', '0:a:0', '-vn', '-sn', '-dn',
+            '-af', audio_filters,
+            '-ar', '44100', '-ac', '2',
+            *encoder,
+            '-map_metadata', '-1', '-map_chapters', '-1',
+            str(output),
+        ], 160)
+
+        if not output.is_file() or output.stat().st_size <= 0:
+            raise ProcessingError('Falha ao gerar o arquivo de áudio.')
+        if output.stat().st_size >= MAX_OUTPUT_BYTES:
+            raise ProcessingError('Áudio final precisa ter menos de 20 MB.')
+        final_duration = duration_seconds(output)
+        if final_duration >= MAX_DURATION:
+            raise ProcessingError('Áudio final precisa ter menos de 7 minutos.')
+
+        return {
+            'original_duration': round(original_duration, 1),
+            'final_duration': round(final_duration, 1),
+            'size_bytes': output.stat().st_size,
+        }
+    except Exception:
+        # Evita disponibilizar ou deixar no histórico um arquivo incompleto.
+        output.unlink(missing_ok=True)
+        raise
 
 def ensure_http_ok(response):
     if response.status_code >= 400:
@@ -131,6 +182,9 @@ def create_roblox_asset(mp3: Path, title: str, creator_id: str, creator_type: st
     if creator_type not in ('user', 'group'):
         raise ProcessingError('Destino Roblox inválido.')
     key = 'userId' if creator_type == 'user' else 'groupId'
+    content_type = {'.mp3': 'audio/mpeg', '.ogg': 'audio/ogg'}.get(mp3.suffix.lower())
+    if not content_type:
+        raise ProcessingError('Envio Roblox aceita apenas MP3 ou OGG nesta integração.')
     payload = {
         'assetType': 'Audio',
         'displayName': title,
@@ -147,7 +201,7 @@ def create_roblox_asset(mp3: Path, title: str, creator_id: str, creator_type: st
                 CREATE_URL,
                 headers={'x-api-key': api_key},
                 data={'request': json.dumps(payload, ensure_ascii=False)},
-                files={'fileContent': (mp3.name, stream, 'audio/mpeg')}
+                files={'fileContent': (mp3.name, stream, content_type)}
             )
         ensure_http_ok(resp)
         obj = resp.json()
