@@ -4,6 +4,8 @@ import os
 import re
 import subprocess
 import time
+import logging
+import shutil
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -14,61 +16,68 @@ OPERATIONS_URL = 'https://apis.roblox.com/assets/v1/operations/'
 MAX_FILE_BYTES = 50 * 1024 * 1024
 MAX_OUTPUT_BYTES = 20 * 1024 * 1024
 MAX_DURATION = 7 * 60
+log = logging.getLogger("naples.media")
 
 class ProcessingError(Exception):
     pass
 
 class PlatformAccessError(ProcessingError):
-    """Fonte recusou importação; não confundir com falha de FFmpeg ou Roblox."""
+    """Falha ao obter mídia do provedor, separada de processamento e publicação."""
+    def __init__(self, message: str, code: str = 'SOURCE_UNAVAILABLE'):
+        super().__init__(message)
+        self.code = code
+
+
+def source_error_code(platform: str, message: str) -> str:
+    msg = (message or '').casefold()
+    if any(x in msg for x in ('not a bot', 'confirm you', 'captcha', 'unusual traffic')):
+        return 'YOUTUBE_VERIFICATION' if platform == 'YouTube' else 'PROVIDER_VERIFICATION'
+    if any(x in msg for x in ('unable to extract client id', 'could not extract client id', 'client_id')):
+        return 'SOUNDCLOUD_CLIENT_ID'
+    if any(x in msg for x in ('aws waf', 'cloudflare challenge', 'challenge required', 'datadome')):
+        return 'PROVIDER_VERIFICATION'
+    if any(x in msg for x in ('login required', 'requires login', 'private video', 'private track', 'members-only', 'age-restricted')):
+        return 'SOURCE_RESTRICTED'
+    if any(x in msg for x in ('http error 429', 'too many requests', 'rate limit')):
+        return 'SOURCE_RATE_LIMIT'
+    if any(x in msg for x in ('http error 401', 'http error 403', 'forbidden', 'unauthorized')):
+        return 'SOURCE_FORBIDDEN'
+    if any(x in msg for x in ('http error 404', 'not found', 'video unavailable', 'track unavailable')):
+        return 'SOURCE_NOT_FOUND'
+    if any(x in msg for x in ('unsupported url', 'requested format is not available', 'no video formats found')):
+        return 'SOURCE_FORMAT_UNAVAILABLE'
+    if any(x in msg for x in ('timed out', 'connection reset', 'http error 500', 'http error 502', 'http error 503', 'http error 504')):
+        return 'SOURCE_NETWORK'
+    return 'SOURCE_UNAVAILABLE'
+
+
+def source_failure_message(platform: str, code: str) -> str:
+    messages = {
+        'YOUTUBE_VERIFICATION': 'O YouTube exigiu uma verificação de acesso. O servidor não pode ignorar essa exigência. Para conteúdo seu, obtenha o arquivo por um meio autorizado e use Arquivo local.',
+        'SOUNDCLOUD_CLIENT_ID': 'O extrator não conseguiu obter a identificação de acesso do SoundCloud. Isso pode acontecer quando o serviço limita acessos de servidores. Se a faixa for sua, use o arquivo original; para download habilitado, utilize a opção oficial Baixar arquivo no SoundCloud.',
+        'PROVIDER_VERIFICATION': f'O {platform} exigiu verificação de acesso que este servidor não consegue concluir. Use um arquivo disponibilizado pelo titular para download.',
+        'SOURCE_RESTRICTED': f'O conteúdo do {platform} exige login, autorização ou é privado. O Naples Studios não acessa conteúdos restritos.',
+        'SOURCE_RATE_LIMIT': f'O {platform} limitou temporariamente as solicitações. Evite novas tentativas em sequência; use arquivo autorizado.',
+        'SOURCE_FORBIDDEN': f'O {platform} negou acesso ao conteúdo (401/403). Verifique as permissões de download da faixa.',
+        'SOURCE_NOT_FOUND': f'O endereço do {platform} não está disponível ou foi removido. Confira se é uma faixa individual válida.',
+        'SOURCE_FORMAT_UNAVAILABLE': f'O {platform} não disponibilizou formato de áudio utilizável para esse link.',
+        'SOURCE_NETWORK': f'Falha temporária de rede ao conectar ao {platform}.',
+        'SOURCE_UNAVAILABLE': f'O {platform} não forneceu o áudio para download. Verifique nos logs protegidos o diagnóstico técnico e use upload direto quando houver bloqueio.',
+    }
+    return messages.get(code, messages['SOURCE_UNAVAILABLE'])
+
 
 
 def explain_platform_failure(platform: str, message: str) -> str:
-    """Converte stderr do extrator em texto seguro, claro e sem credenciais/URLs.
+    return source_failure_message(platform, source_error_code(platform, message))
 
-    Não tenta contornar CAPTCHA, login, DRM ou outras restrições da plataforma.
-    """
-    msg = (message or '').lower()
-    if any(x in msg for x in (
-        'sign in to confirm you', 'not a bot', 'confirm you’re not a bot',
-        "confirm you're not a bot", 'captcha', 'unusual traffic',
-    )):
-        return ('O YouTube solicitou verificação de acesso automatizado e bloqueou '
-                'a importação pelo servidor. Atualizar o extrator pode não resolver. '
-                'Use o upload de um arquivo próprio ou obtido com autorização.')
-    if any(x in msg for x in ('private video', 'private track', 'this video is private',
-                             'this track is private', 'login required', 'requires login',
-                             'sign in to view', 'members-only', 'age-restricted')):
-        return (f'O conteúdo no {platform} exige login ou permissão adicional. '
-                'O Naples Studios não acessa conteúdo privado ou restrito. '
-                'Envie um arquivo que você tenha autorização para usar.')
-    if any(x in msg for x in ('http error 429', 'too many requests', 'rate limit',
-                             'rate-limit', 'request limit exceeded')):
-        return (f'O {platform} limitou temporariamente as solicitações desta conexão. '
-                'Não tente repetidamente agora; use um arquivo local autorizado.')
-    if any(x in msg for x in ('geo-restricted', 'not available in your country',
-                             'not available in your region', 'geoblocked')):
-        return (f'O {platform} restringe este conteúdo para a região do servidor. '
-                'Use outro conteúdo permitido ou um arquivo local autorizado.')
-    if any(x in msg for x in ('http error 401', 'http error 403', 'forbidden', 'unauthorized')):
-        return (f'O {platform} negou acesso à mídia (HTTP 401/403). '
-                'Confirme se o conteúdo está público e disponível para reutilização.')
-    if any(x in msg for x in ('http error 404', 'video unavailable', 'track unavailable',
-                             'not found', 'has been removed', 'does not exist')):
-        return (f'O link no {platform} não está disponível. Confira se a URL existe '
-                'e se o autor permite acessar o conteúdo.')
-    if any(x in msg for x in ('unsupported url', 'no video formats found',
-                             'requested format is not available', 'no formats found')):
-        return (f'O {platform} não ofereceu um formato de áudio compatível neste link. '
-                'Atualize o yt-dlp ou envie um arquivo local autorizado.')
-    if any(x in msg for x in ('timed out', 'connection reset', 'temporary failure',
-                             'network is unreachable', 'http error 500', 'http error 502',
-                             'http error 503', 'http error 504')):
-        return (f'Falha temporária de conexão ao {platform}. '
-                'Tente novamente mais tarde ou use arquivo local.')
-    return (f'Não foi possível importar o link do {platform}. '
-            'Verifique se é público, acessível e autorizado para uso; '
-            'caso contrário utilize o envio de arquivo local. Consulte logs do Railway '
-            'para diagnóstico técnico (não compartilhe credenciais).')
+
+def safe_debug(message: str) -> str:
+    """Retira URLs, parâmetros e cadeias potencialmente sensíveis dos logs."""
+    message = re.sub(r'https?://\S+', '[URL]', message or '')
+    message = re.sub(r'(?i)(authorization|cookie|token|api[_-]?key|password)\s*[:=]\s*\S+', r'\1=[REDACTED]', message)
+    return message[-900:].replace('\n', ' | ')
+
 
 def valid_creator_id(raw):
     val = str(raw or '').strip()
@@ -107,7 +116,7 @@ def run(cmd, timeout):
     except subprocess.TimeoutExpired:
         raise ProcessingError('O processamento excedeu o tempo permitido.')
     if r.returncode:
-        detail = (r.stderr or r.stdout or '').strip()[-450:]
+        detail = (r.stderr or r.stdout or '').strip()[-1600:]
         raise ProcessingError(f'Não foi possível processar este áudio. {detail}')
     return r.stdout.strip()
 
@@ -133,7 +142,10 @@ def download_platform(url: str, workdir: Path) -> Path:
         # Nunca publica os logs brutos do yt-dlp, URLs privadas ou dados de sessão.
         if str(exc).startswith('Ferramenta yt-dlp não instalada'):
             raise PlatformAccessError('O yt-dlp não está instalado no servidor. Refaça o deploy do Dockerfile.') from exc
-        raise PlatformAccessError(explain_platform_failure(platform, str(exc))) from exc
+        code = source_error_code(platform, str(exc))
+        log.warning('Falha de importação | plataforma=%s | codigo=%s | diagnostico=%s',
+                    platform, code, safe_debug(str(exc)))
+        raise PlatformAccessError(f'[{code}] {source_failure_message(platform, code)}', code=code) from exc
     files = [p for p in workdir.glob('fonte.*') if p.is_file()]
     if len(files) != 1:
         raise PlatformAccessError('A plataforma não entregou um único arquivo de áudio utilizável. Tente upload local.')
@@ -218,6 +230,7 @@ def convert_2_5x(source: Path, output: Path) -> dict:
         final_duration = duration_seconds(output)
         if final_duration >= MAX_DURATION:
             raise ProcessingError('Áudio final precisa ter menos de 7 minutos.')
+        inspect_output_audio(output)
 
         return {
             'original_duration': round(original_duration, 1),
@@ -228,6 +241,27 @@ def convert_2_5x(source: Path, output: Path) -> dict:
         # Evita disponibilizar ou deixar no histórico um arquivo incompleto.
         output.unlink(missing_ok=True)
         raise
+
+def inspect_output_audio(path: Path) -> dict:
+    """Verificação técnica antes de chamar Roblox; NÃO é um teste de direitos autorais."""
+    proc = subprocess.run([
+        'ffprobe', '-v', 'error', '-select_streams', 'a:0',
+        '-show_entries', 'stream=codec_name,sample_rate,channels',
+        '-of', 'json', str(path)
+    ], capture_output=True, text=True, timeout=25, check=False)
+    if proc.returncode:
+        raise ProcessingError('O arquivo final não pôde ser analisado pelo ffprobe.')
+    try:
+        audio = json.loads(proc.stdout).get('streams', [])[0]
+        codec = audio['codec_name']
+        sr = int(audio['sample_rate'])
+        channels = int(audio['channels'])
+    except (IndexError, KeyError, ValueError, TypeError, json.JSONDecodeError):
+        raise ProcessingError('O arquivo final não contém uma faixa de áudio válida.')
+    if codec not in ('mp3', 'vorbis') or sr != 44100 or channels not in (1, 2):
+        raise ProcessingError('Formato de áudio inválido para Roblox: reexporte em MP3 ou OGG, 44.1 kHz, mono/estéreo.')
+    return {'codec': codec, 'sample_rate': sr, 'channels': channels}
+
 
 def ensure_http_ok(response):
     if response.status_code >= 400:
