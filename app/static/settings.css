@@ -11,3 +11,5 @@
 @media(max-width:800px){.settings-shell{display:block}.settings-aside{height:auto;position:static;padding:18px 20px;border-bottom:1px solid #28553a}.settings-aside-head,.aside-checks,.aside-bottom{display:none}.settings-main{padding:22px 18px}.settings-bar h2{font-size:20px}.bar-actions{gap:7px}.bar-actions .secondary-btn{font-size:10px;padding:8px}.setup-stage{margin:34px auto;padding:26px}.config-fields{grid-template-columns:1fr;padding:18px}.config-card-title{padding:18px}.config-card-title h4{font-size:16px}.config-fields .field-wide{grid-column:auto}.config-fields>.processing-chip{grid-column:auto}.callback-display{flex-wrap:wrap}.password-card form{grid-template-columns:1fr}.config-actions{flex-direction:column;align-items:stretch}.config-actions .primary-setting{width:100%}.config-bottom span{display:none}}
 
 #setupCodeArea{display:grid;gap:10px;margin-bottom:10px}#setupCodeArea small{color:#90a995;font-size:11px;line-height:1.5}
+
+#inspectRobloxKey{margin:12px 0 4px;max-width:max-content;}#robloxInspection{display:block;color:#8edab0;line-height:1.5;}

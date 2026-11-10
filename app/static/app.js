@@ -64,10 +64,9 @@ function showApp(profile, config){
     image.referrerPolicy='no-referrer';image.onerror=()=>{avatar.textContent=(profile.username||'N').charAt(0).toUpperCase();};
     avatar.appendChild(image);
   }else avatar.textContent=(profile.username||'N').charAt(0).toUpperCase();
-  $('creatorId').value=config.creator_id||'';
-  $('creatorType').value=config.creator_type||'user';
-  $('batchCreatorId').value=config.creator_id||'';
-  $('batchCreatorType').value=config.creator_type||'user';
+  const configuredTarget = `${config.creator_type==='group'?'Grupo':'Usuário'} Roblox #${config.creator_id||'não configurado'}`;
+  $('uploadTargetNotice').textContent=`Destino automático: ${configuredTarget}. Altere somente em Roblox Key.`;
+  $('batchTargetNotice').textContent=`Destino automático do lote: ${configuredTarget}. Altere somente em Roblox Key.`;
   if(!config.platform_links){
     $('urlHint').textContent='Links estão desativados nas configurações web. Use arquivo local ou habilite a importação no painel de administração.';
     switchSource('file');
@@ -124,12 +123,8 @@ $('uploadForm').addEventListener('submit',async e=>{
   e.preventDefault();
   const form=new FormData();
   const title=$('title').value.trim();
-  const cid=$('creatorId').value.trim();
-  if(!/^[1-9]\d*$/.test(cid)){toast('Digite um ID numérico válido de usuário ou grupo Roblox.',true);return;}
   if(!$('rights').checked){toast('Confirme a autorização do áudio.',true);return;}
   form.set('title',title);
-  form.set('creator_id',cid);
-  form.set('creator_type',$('creatorType').value);
   form.set('rights_confirmed','true');
   if(currentSource==='url'){
     if(!$('sourceUrl').value.trim()){toast('Cole um link de música.',true);return;}
@@ -451,9 +446,6 @@ function renderBatchProgress(){
 $('batchForm').addEventListener('submit',async(e)=>{
   e.preventDefault();
   if(batchFileUploading)return;
-  const creator_id=$('batchCreatorId').value.trim();
-  const creator_type=$('batchCreatorType').value;
-  if(!/^[1-9]\d*$/.test(creator_id)){toast('Informe um ID Roblox numérico válido.',true);return;}
   if(!$('batchRights').checked){toast('Confirme os direitos de todas as músicas.',true);return;}
   const button=$('batchSubmitBtn');const label=button.querySelector('span');
   button.disabled=true;
@@ -463,7 +455,7 @@ $('batchForm').addEventListener('submit',async(e)=>{
       label.textContent='CRIANDO LOTE...';
       const result=await api('/api/batches/links',{
         method:'POST', headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({creator_id,creator_type,items,rights_confirmed:true})
+        body:JSON.stringify({items,rights_confirmed:true})
       });
       currentBatchId=result.batch_id;
       $('batchProgressBox').hidden=false;
@@ -483,8 +475,6 @@ $('batchForm').addEventListener('submit',async(e)=>{
         label.textContent=`ENVIANDO ${i+1} DE ${files.length}...`;
         const payload=new FormData();
         payload.set('title',(file.name.replace(/\.[^/.]+$/,'')||`Áudio ${i+1}`).slice(0,80).padEnd(3,'_'));
-        payload.set('creator_id',creator_id);
-        payload.set('creator_type',creator_type);
         payload.set('rights_confirmed','true');
         payload.set('batch_id',id);
         payload.set('audio_file',file);

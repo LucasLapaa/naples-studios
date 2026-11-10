@@ -52,3 +52,59 @@ el('appBaseUrl').addEventListener('input',setPreview);
 for(const btn of document.querySelectorAll('[data-reveal]'))btn.addEventListener('click',()=>{const input=el(btn.dataset.reveal);input.type=input.type==='password'?'text':'password';btn.textContent=input.type==='password'?'◉':'◌';});
 el('copyRedirect').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(el('redirectPreview').textContent);message('Redirect URI copiada.');}catch{message('Copie manualmente a URI exibida.',true);}});
 init();
+
+// Naples v9: descoberta oficial de ID pelo endpoint de introspecção da API Key.
+// A chave é enviada somente ao backend autenticado e não é armazenada no browser.
+let lastKeyInfo=null;
+let keyInspectorTimer=null;
+let inspectingKey=false;
+function setInspectionFeedback(text, error=false){
+  const node=el('robloxInspection');node.textContent=text;
+  node.style.color=error?'#ff9f9f':'#8edab0';
+}
+function applyKeyIdentity(info){
+  lastKeyInfo=info;
+  let type=el('creatorTypeConfig').value;
+  if(type==='user' && info.default_creator_type==='group' && info.suggested_group_id){
+    type='group';el('creatorTypeConfig').value='group';
+  }
+  if(type==='group'){
+    if(info.suggested_group_id){el('creatorIdConfig').value=info.suggested_group_id;}
+    else if(info.allowed_group_ids?.length){
+      el('creatorIdConfig').value='';
+      setInspectionFeedback('A chave permite múltiplos grupos. Informe o ID do grupo somente aqui em Roblox Key.');
+      return;
+    }
+  }else if(info.authorized_user_id){
+    el('creatorIdConfig').value=info.authorized_user_id;
+  }else if(info.default_creator_type==='user' && info.default_creator_id){
+    el('creatorIdConfig').value=info.default_creator_id;
+  }
+  const owner=info.authorized_user_id?'Usuário autorizado #'+info.authorized_user_id:'Usuário não informado';
+  setInspectionFeedback(`${owner}. Assets > Write confirmado. ${type==='group'?'Destino de grupo: '+(info.suggested_group_id||'escolha o ID aqui'):'ID preenchido automaticamente.'}`);
+}
+async function inspectRobloxKey(){
+  if(inspectingKey)return;
+  const input=el('robloxKey').value.trim();
+  if(input && input.length<16){setInspectionFeedback('Cole a chave completa antes da validação.',true);return;}
+  inspectingKey=true;
+  const btn=el('inspectRobloxKey');btn.disabled=true;
+  const old=btn.textContent;btn.textContent='Consultando API Roblox...';
+  try{
+    const result=await request('/api/admin/roblox-key/inspect','POST', {api_key:input});
+    applyKeyIdentity(result);
+  }catch(err){setInspectionFeedback(err.message,true);lastKeyInfo=null;}
+  finally{inspectingKey=false;btn.disabled=false;btn.textContent=old;}
+}
+el('inspectRobloxKey').addEventListener('click',inspectRobloxKey);
+el('robloxKey').addEventListener('input',()=>{
+  clearTimeout(keyInspectorTimer);
+  const v=el('robloxKey').value.trim();
+  if(v.length>=16){
+    setInspectionFeedback('Validando chave e identificando o criador...');
+    keyInspectorTimer=setTimeout(inspectRobloxKey,1400);
+  }
+});
+el('creatorTypeConfig').addEventListener('change',()=>{
+  if(lastKeyInfo)applyKeyIdentity(lastKeyInfo);
+});

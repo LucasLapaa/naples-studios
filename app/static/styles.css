@@ -65,3 +65,5 @@
 .naples-batch-result small{color:#a3c5af}
 .naples-batch-disclaimer{font-size:.81rem;line-height:1.6;color:#86a693;margin:0}
 @media(max-width:750px){.naples-batch-panel{padding:16px}.naples-batch-head{align-items:flex-start}.naples-batch-count{font-size:1.4rem}.naples-batch-free{align-self:flex-start}.naples-batch-result{align-items:flex-start}}
+
+.naples-publish-target{padding:14px 18px;margin:8px 0 18px;border:1px solid #2c6853;border-radius:12px;background:#10291f;color:#a6ecca;font-size:14px}.naples-publish-target a{color:#62f0b1;text-decoration:underline}
