@@ -119,7 +119,7 @@ $('previewBtn').addEventListener('click',async()=>{
   try{
     const meta=await api('/api/media/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url})});
     const length=meta.duration?` · ${fmtDuration(meta.duration)}`:'';
-    showMediaPreview(meta.title,`${meta.platform}${length}${meta.uploader?' · '+meta.uploader:''}`);
+    showMediaPreview(meta.title,`${meta.platform}${length}${meta.uploader?' · '+meta.uploader:''}${meta.note?' · '+meta.note:''}`);
     if(!$('title').value.trim()) $('title').value=meta.title.slice(0,80);
   }catch(e){
     if (/\[(YOUTUBE_VERIFICATION|PROVIDER_VERIFICATION|SOURCE_RESTRICTED|SOURCE_FORBIDDEN|SOURCE_RATE_LIMIT)\]/.test(e.message)){
