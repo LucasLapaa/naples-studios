@@ -58,7 +58,8 @@ def require_session(request: Request, mutate=False):
         raise HTTPException(401, 'Faça login com o Discord.')
     with db.connect() as conn:
         row = conn.execute('SELECT * FROM sessions WHERE token_hash=? AND expires_at>?', (hashed(raw), int(time.time()))).fetchone()
-    if not row or row['discord_id'] not in config.DISCORD_ALLOWED_USER_IDS:
+        suspended = bool(row and db.user_suspended(conn, row['discord_id']))
+    if not row or suspended or (not config.DISCORD_PUBLIC_REGISTRATION and row['discord_id'] not in config.DISCORD_ALLOWED_USER_IDS):
         raise HTTPException(401, 'Sessão expirada ou acesso não autorizado.')
     if mutate:
         csrf = request.headers.get('x-csrf-token', '')
@@ -290,7 +291,22 @@ def admin_session(request: Request):
 @app.get('/api/admin/settings')
 def admin_settings(request: Request):
     current_admin(request)
-    return {'settings': store.public_values(), 'ready': config.ready(),
+    values = store.public_values()
+    # O admin web também enxerga a configuração efetiva, mesmo quando OAuth foi
+    # informado anteriormente pelo Railway, sem revelar tokens sensíveis.
+    for key, effective in (
+        ('app_base_url', config.APP_BASE_URL),
+        ('discord_client_id', config.DISCORD_CLIENT_ID),
+    ):
+        if not values.get(key) or (key == 'app_base_url' and values[key] == 'http://127.0.0.1:8000'):
+            values[key] = effective
+    values['cookie_secure'] = config.COOKIE_SECURE
+    values['discord_public_registration'] = config.DISCORD_PUBLIC_REGISTRATION
+    if 'discord_allowed_user_ids' not in store.read_values():
+        values['discord_allowed_user_ids'] = ', '.join(sorted(config.DISCORD_ALLOWED_USER_IDS))
+    values['discord_client_secret_configured'] = bool(config.DISCORD_CLIENT_SECRET)
+    values['roblox_api_key_configured'] = bool(config.ROBLOX_API_KEY)
+    return {'settings': values, 'ready': config.ready(),
             'callback_url': config.APP_BASE_URL + '/auth/discord/callback'}
 
 
@@ -324,13 +340,19 @@ async def save_admin_settings(request: Request):
         raise HTTPException(400, 'Campos não reconhecidos.')
     previous = store.read_values()
     values = {**store.DEFAULTS, **previous}
+    # Preserva o OAuth funcional importado do Railway quando for alterado o
+    # cadastro público sem reenviar o Client Secret.
+    if not values.get('discord_client_id'):
+        values['discord_client_id'] = config.DISCORD_CLIENT_ID
+    if not values.get('discord_client_secret'):
+        values['discord_client_secret'] = config.DISCORD_CLIENT_SECRET
     for k, val in data.items():
         if k in ('discord_client_secret', 'roblox_api_key'):
             if val is not None and (not isinstance(val, str) or len(val) > 5000):
                 raise HTTPException(400, 'Credencial inválida.')
             if val and val.strip():
                 values[k] = val.strip()
-        elif k in ('cookie_secure', 'enable_platform_links'):
+        elif k in ('cookie_secure', 'enable_platform_links', 'discord_public_registration'):
             if not isinstance(val, bool):
                 raise HTTPException(400, f'{k} deve ser booleano.')
             values[k] = val
@@ -340,8 +362,9 @@ async def save_admin_settings(request: Request):
             values[k] = val.strip()
     if not values.get('discord_client_secret') or len(values.get('discord_client_secret')) < 8:
         raise HTTPException(400, 'Preencha o Client Secret do Discord (mínimo 8 caracteres).')
-    if not values.get('roblox_api_key') or len(values.get('roblox_api_key')) < 16:
-        raise HTTPException(400, 'Preencha uma API Key Roblox válida (mínimo 16 caracteres).')
+    # Roblox Key é pessoal, vinculada ao Discord no dashboard, não obrigatória no admin.
+    if values.get('roblox_api_key') and len(values['roblox_api_key']) < 16:
+        raise HTTPException(400, 'API Key Roblox informada é inválida.')
     # Quando uma nova chave é informada, consulta a API oficial de introspecção
     # para descobrir a identidade autorizada sem exigir ID no formulário de upload.
     # Seleção de grupo ocorre SOMENTE aqui quando não houver grupo único.
@@ -394,6 +417,29 @@ async def admin_change_password(request: Request):
     resp = JSONResponse({'ok': True})
     resp.delete_cookie(config.ADMIN_COOKIE, path='/')
     return resp
+
+
+@app.get('/api/admin/users')
+def admin_list_users(request: Request):
+    current_admin(request)
+    with db.connect() as conn:
+        rows = conn.execute('SELECT discord_id,username,avatar_url,created_at,last_login,suspended FROM discord_users ORDER BY last_login DESC LIMIT 300').fetchall()
+    return {'users': [dict(x) for x in rows]}
+
+
+@app.put('/api/admin/users/{discord_id}/suspension')
+async def admin_suspend_user(discord_id: str, request: Request):
+    current_admin(request, mutate=True)
+    if not discord_id.isdigit(): raise HTTPException(400, 'ID Discord inválido.')
+    payload = await request.json()
+    if not isinstance(payload, dict) or not isinstance(payload.get('suspended'), bool):
+        raise HTTPException(400, 'Informe suspended como true ou false.')
+    suspended = bool(payload['suspended'])
+    with db.connect() as conn:
+        result = conn.execute('UPDATE discord_users SET suspended=? WHERE discord_id=?', (int(suspended),discord_id))
+        if not result.rowcount: raise HTTPException(404, 'Usuário não encontrado.')
+        if suspended: conn.execute('DELETE FROM sessions WHERE discord_id=?', (discord_id,))
+    return {'ok': True, 'discord_id': discord_id, 'suspended': suspended}
 
 
 @app.post('/api/admin/logout')
@@ -461,7 +507,7 @@ async def discord_callback(request: Request, code: str = '', state: str = '', er
         return RedirectResponse('/?login_error=discord', status_code=303)
 
     discord_id = str(user.get('id', ''))
-    if not discord_id.isdigit() or discord_id not in config.DISCORD_ALLOWED_USER_IDS:
+    if not discord_id.isdigit() or (not config.DISCORD_PUBLIC_REGISTRATION and discord_id not in config.DISCORD_ALLOWED_USER_IDS):
         return RedirectResponse('/?login_error=acesso', status_code=303)
 
     username = str(user.get('global_name') or user.get('username') or 'Usuário')[:100]
@@ -470,6 +516,9 @@ async def discord_callback(request: Request, code: str = '', state: str = '', er
     now = int(time.time())
     with db.connect() as conn:
         db.prune(conn)
+        if db.user_suspended(conn, discord_id):
+            return RedirectResponse('/?login_error=acesso', status_code=303)
+        db.upsert_discord_user(conn, discord_id, username, avatar)
         conn.execute('''INSERT INTO sessions (token_hash,discord_id,username,avatar_url,csrf_token_hash,created_at,expires_at)
                       VALUES (?,?,?,?,?,?,?)''',
                      (hashed(session_token), discord_id, username, avatar, hashed(derive_csrf(session_token)), now, now + config.SESSION_HOURS * 3600))
@@ -486,8 +535,10 @@ async def discord_callback(request: Request, code: str = '', state: str = '', er
 def current_roblox_credential(discord_id: str):
     user_key = store.load_discord_roblox_key(discord_id)
     if user_key is not None: return user_key if user_key['api_key'] else None
-    # Preserve the operator's previous Roblox configuration after migration.
-    if (config.ROBLOX_API_KEY and config.ROBLOX_CREATOR_ID and
+    # Não compartilhar a Key global herdada com usuários de cadastro público.
+    # No modo fechado, somente os operadores legados já autorizados mantêm esse fallback.
+    if (not config.DISCORD_PUBLIC_REGISTRATION and
+            config.ROBLOX_API_KEY and config.ROBLOX_CREATOR_ID and
             discord_id in config.DISCORD_ALLOWED_USER_IDS):
         return {'api_key': config.ROBLOX_API_KEY,
                 'creator_type': config.ROBLOX_CREATOR_TYPE,
@@ -545,7 +596,7 @@ def session(request: Request):
         'config': {
             'platform_links': config.ENABLE_PLATFORM_LINKS, 'speed': 2.5,
             'creator_id': roblox['creator_id'] if roblox else '', 'creator_type': roblox['creator_type'] if roblox else 'user',
-            'version': '10.0', 'roblox_connected': bool(roblox)
+            'version': '11.0', 'roblox_connected': bool(roblox)
         }
     }
 

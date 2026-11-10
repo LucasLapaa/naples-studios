@@ -18,6 +18,8 @@ APP_BASE_URL = 'http://127.0.0.1:8000'
 DISCORD_CLIENT_ID = ''
 DISCORD_CLIENT_SECRET = ''
 DISCORD_ALLOWED_USER_IDS = set()
+# Cadastro livre: qualquer Discord autenticado entra sem aprovação manual.
+DISCORD_PUBLIC_REGISTRATION = True
 ROBLOX_API_KEY = ''
 ROBLOX_CREATOR_ID = ''
 ROBLOX_CREATOR_TYPE = 'user'
@@ -36,13 +38,15 @@ def reload_settings():
         # preencher OAuth2 caso o valor persistido esteja vazio.
         saved = persisted.get(k)
         return saved if saved not in ('', None) else (os.getenv(env, default) if env else default)
-    global APP_BASE_URL, DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DISCORD_ALLOWED_USER_IDS
+    global APP_BASE_URL, DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DISCORD_ALLOWED_USER_IDS, DISCORD_PUBLIC_REGISTRATION
     global ROBLOX_API_KEY, ROBLOX_CREATOR_ID, ROBLOX_CREATOR_TYPE, ROBLOX_ALLOWED_CREATOR_IDS
     global ENABLE_PLATFORM_LINKS, COOKIE_SECURE, SESSION_SECRET
     APP_BASE_URL = str(get('app_base_url', 'APP_BASE_URL', 'http://127.0.0.1:8000')).rstrip('/')
     DISCORD_CLIENT_ID = str(get('discord_client_id', 'DISCORD_CLIENT_ID'))
     DISCORD_CLIENT_SECRET = str(get('discord_client_secret', 'DISCORD_CLIENT_SECRET'))
     DISCORD_ALLOWED_USER_IDS = {x.strip() for x in str(get('discord_allowed_user_ids', 'DISCORD_ALLOWED_USER_IDS')).split(',') if x.strip()}
+    raw_public = get('discord_public_registration', 'DISCORD_PUBLIC_REGISTRATION', '1')
+    DISCORD_PUBLIC_REGISTRATION = raw_public is True or str(raw_public).lower() in ('1','true','on')
     ROBLOX_API_KEY = str(get('roblox_api_key', 'ROBLOX_API_KEY'))
     ROBLOX_CREATOR_ID = str(get('roblox_creator_id', 'ROBLOX_CREATOR_ID'))
     ROBLOX_CREATOR_TYPE = str(get('roblox_creator_type', 'ROBLOX_CREATOR_TYPE', 'user'))
@@ -56,7 +60,7 @@ def reload_settings():
 
 def ready():
     return (DISCORD_CLIENT_ID.isdigit() and bool(DISCORD_CLIENT_SECRET) and
-            bool(DISCORD_ALLOWED_USER_IDS) and all(x.isdigit() for x in DISCORD_ALLOWED_USER_IDS) and
+            (DISCORD_PUBLIC_REGISTRATION or bool(DISCORD_ALLOWED_USER_IDS)) and all(x.isdigit() for x in DISCORD_ALLOWED_USER_IDS) and
             len(ROBLOX_API_KEY) >= 16 and bool(ROBLOX_CREATOR_ID) and ROBLOX_CREATOR_ID.isdigit() and
             ROBLOX_CREATOR_TYPE in ('user','group') and len(SESSION_SECRET) >= 32)
 
@@ -75,10 +79,14 @@ def validate_settings(values):
     if not str(values['discord_client_id']).isdigit():
         raise ValueError('Client ID do Discord deve ser numérico.')
     ids = [x.strip() for x in str(values['discord_allowed_user_ids']).split(',') if x.strip()]
-    if not ids or not all(x.isdigit() for x in ids):
-        raise ValueError('Informe ao menos um ID de usuário Discord autorizado.')
-    if not str(values['roblox_creator_id']).isdigit():
+    if not all(x.isdigit() for x in ids):
+        raise ValueError('IDs de usuário Discord precisam ser numéricos.')
+    if not values.get('discord_public_registration', True) and not ids:
+        raise ValueError('No modo restrito, informe ao menos um ID Discord autorizado.')
+    if values.get('roblox_creator_id') and not str(values['roblox_creator_id']).isdigit():
         raise ValueError('Informe um ID numérico de usuário/grupo Roblox.')
+    if values.get('roblox_api_key') and not str(values['roblox_creator_id']).isdigit():
+        raise ValueError('Uma API Key Roblox salva precisa ter ID de criador válido.')
     if values['roblox_creator_type'] not in ('user','group'):
         raise ValueError('Tipo de criador Roblox inválido.')
     allowed = [x.strip() for x in str(values['roblox_allowed_creator_ids']).split(',') if x.strip()]
@@ -90,5 +98,6 @@ def validate_settings(values):
 def oauth_ready():
     """Discord OAuth is application-level; Roblox is set after login per user."""
     return (DISCORD_CLIENT_ID.isdigit() and bool(DISCORD_CLIENT_SECRET) and
-            bool(DISCORD_ALLOWED_USER_IDS) and all(i.isdigit() for i in DISCORD_ALLOWED_USER_IDS) and
+            (DISCORD_PUBLIC_REGISTRATION or bool(DISCORD_ALLOWED_USER_IDS)) and
+            all(i.isdigit() for i in DISCORD_ALLOWED_USER_IDS) and
             len(SESSION_SECRET) >= 32)

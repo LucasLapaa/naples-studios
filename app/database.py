@@ -53,6 +53,13 @@ def initialize():
         db.execute('''CREATE TABLE IF NOT EXISTS oauth_states (
             state_hash TEXT PRIMARY KEY, expires_at INTEGER NOT NULL
         )''')
+        # Cadastro automático: usuários do Discord são criados no primeiro OAuth.
+        db.execute('''CREATE TABLE IF NOT EXISTS discord_users (
+            discord_id TEXT PRIMARY KEY, username TEXT NOT NULL, avatar_url TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            last_login TEXT NOT NULL DEFAULT (datetime('now')),
+            suspended INTEGER NOT NULL DEFAULT 0
+        )''')
         # v10: chave Roblox individual do Discord, criptografada via settings_store.
         db.execute('''CREATE TABLE IF NOT EXISTS user_roblox_credentials (
             discord_id TEXT PRIMARY KEY, secret_payload BLOB NOT NULL,
@@ -135,3 +142,17 @@ def get_job(job_id, user_id):
 def list_jobs(user_id):
     with connect() as db:
         return db.execute('SELECT * FROM jobs WHERE discord_user_id=? ORDER BY created_at DESC, rowid DESC LIMIT 250', (user_id,)).fetchall()
+
+
+def upsert_discord_user(conn, discord_id: str, username: str, avatar_url: str):
+    """Cria conta automaticamente sem qualquer senha adicional."""
+    conn.execute(
+        """INSERT INTO discord_users (discord_id, username, avatar_url)
+        VALUES (?,?,?) ON CONFLICT(discord_id) DO UPDATE SET
+        username=excluded.username, avatar_url=excluded.avatar_url,
+        last_login=datetime('now')""", (discord_id, username, avatar_url))
+
+
+def user_suspended(conn, discord_id: str) -> bool:
+    row = conn.execute('SELECT suspended FROM discord_users WHERE discord_id=?', (discord_id,)).fetchone()
+    return bool(row and row['suspended'])

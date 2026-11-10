@@ -18,7 +18,8 @@ SENSITIVE = {'discord_client_secret', 'roblox_api_key', 'session_secret'}
 DEFAULTS = {
     'app_base_url': 'http://127.0.0.1:8000', 'cookie_secure': False,
     'discord_client_id': '', 'discord_client_secret': '',
-    'discord_allowed_user_ids': '', 'roblox_api_key': '', 'roblox_creator_id': '',
+    'discord_allowed_user_ids': '', 'discord_public_registration': True,
+    'roblox_api_key': '', 'roblox_creator_id': '',
     'roblox_creator_type': 'user', 'roblox_allowed_creator_ids': '',
     'enable_platform_links': True,
 }
