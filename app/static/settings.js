@@ -30,9 +30,9 @@ async function loadSettings(){
  el('discordSecret').value='';el('robloxKey').value='';
  el('discordSecretStatus').textContent=secretsSet.discord_client_secret?'✓ Secret armazenado com segurança (deixe vazio para manter)':'Ainda não configurado';
  el('robloxKeyStatus').textContent=secretsSet.roblox_api_key?'✓ Key armazenada com segurança (deixe vazio para manter)':'Ainda não configurada';
- const discordDone=!!(settings.discord_client_id&&settings.discord_allowed_user_ids&&secretsSet.discord_client_secret),robloxDone=!!(settings.roblox_creator_id&&secretsSet.roblox_api_key);
+ const discordDone=!!(settings.discord_client_id&&(settings.discord_public_registration||settings.discord_allowed_user_ids)&&secretsSet.discord_client_secret),robloxDone=!!(settings.roblox_creator_id&&secretsSet.roblox_api_key);
  for(const [name,done] of [['stateDiscord',discordDone],['stateRoblox',robloxDone]]){el(name).textContent=done?'✓':'○';el(name).classList.toggle('ready',done);}
- updateStatus(true);setPreview();view('configurationPanel');
+ updateStatus(true);setPreview();view('configurationPanel');await loadUsers();
 }
 async function init(){try{
  const status=await request('/api/setup/status');ready=status.ready;bootstrapped=status.bootstrapped;requiresSetupCode=!!status.requires_setup_code;el('setupCodeArea').hidden=!requiresSetupCode;updateStatus(bootstrapped);
@@ -42,7 +42,7 @@ async function init(){try{
 }catch(e){message('Servidor indisponível: '+e.message,true);}}
 el('bootstrapForm').addEventListener('submit',async e=>{e.preventDefault();const a=el('firstPassword').value,b=el('confirmPassword').value;if(a!==b){message('As senhas não correspondem.',true);return;}try{const r=await request('/api/setup/bootstrap','POST',{password:a,setup_code:requiresSetupCode?el('setupCode').value.trim():''});csrf=r.csrf;bootstrapped=true;el('firstPassword').value='';el('confirmPassword').value='';await loadSettings();message('Administrador criado. Configure suas integrações.');}catch(x){message(x.message,true);}});
 el('adminLoginForm').addEventListener('submit',async e=>{e.preventDefault();try{const r=await request('/api/admin/login','POST',{password:el('adminPassword').value});csrf=r.csrf;el('adminPassword').value='';await loadSettings();message('Acesso às configurações liberado.');}catch(x){message(x.message,true);}});
-el('settingsForm').addEventListener('submit',async e=>{e.preventDefault();const body={};new FormData(el('settingsForm')).forEach((value,key)=>{body[key]=String(value).trim();});body.cookie_secure=el('cookieSecure').checked;body.enable_platform_links=el('enableLinks').checked;if(!body.discord_client_secret)delete body.discord_client_secret;if(!body.roblox_api_key)delete body.roblox_api_key;
+el('settingsForm').addEventListener('submit',async e=>{e.preventDefault();const body={};new FormData(el('settingsForm')).forEach((value,key)=>{body[key]=String(value).trim();});body.cookie_secure=el('cookieSecure').checked;body.enable_platform_links=el('enableLinks').checked;body.discord_public_registration=el('discordPublic').checked;if(!body.discord_client_secret)delete body.discord_client_secret;if(!body.roblox_api_key)delete body.roblox_api_key;
  const btn=el('saveSettings');btn.disabled=true;el('saveState').textContent='Salvando configurações criptografadas...';
  try{const r=await request('/api/admin/settings','PUT',body);ready=r.ready;await loadSettings();el('saveState').textContent='Configurações salvas com sucesso.';message('Tudo salvo. Acesse o painel e entre com o Discord.');}
  catch(x){el('saveState').textContent='Não foi possível salvar.';message(x.message,true);}finally{btn.disabled=false;}});
@@ -108,3 +108,27 @@ el('robloxKey').addEventListener('input',()=>{
 el('creatorTypeConfig').addEventListener('change',()=>{
   if(lastKeyInfo)applyKeyIdentity(lastKeyInfo);
 });
+
+// v11: todas as contas Discord se registram automaticamente; administrador pode bloquear abusos.
+async function loadUsers(){
+ const list=el('userList');if(!list)return;
+ try{
+  const data=await request('/api/admin/users');
+  list.replaceChildren();el('usersCount').textContent=`${data.users.length} contas`;
+  if(!data.users.length){const note=document.createElement('p');note.className='naples-user-empty';note.textContent='Nenhuma conta cadastrada ainda.';list.append(note);return;}
+  for(const user of data.users){
+   const row=document.createElement('div');row.className='naples-user-item';
+   const details=document.createElement('div');const name=document.createElement('b');name.textContent=user.username || 'Discord';
+   const id=document.createElement('small');id.textContent=`ID ${user.discord_id} · ${user.suspended?'Bloqueado':'Ativo'}`;
+   details.append(name,id);
+   const button=document.createElement('button');button.type='button';button.className=user.suspended?'reenable':'';button.textContent=user.suspended?'Desbloquear':'Bloquear';
+   button.addEventListener('click',async()=>{
+    if(!window.confirm(`${user.suspended?'Desbloquear':'Bloquear'} ${user.username}?`))return;
+    button.disabled=true;
+    try{await request(`/api/admin/users/${encodeURIComponent(user.discord_id)}/suspension`,'PUT',{suspended:!Boolean(user.suspended)});await loadUsers();message('Permissão do usuário atualizada.');}
+    catch(err){message(err.message,true);button.disabled=false;}
+   });row.append(details,button);list.append(row);
+  }
+ }catch(err){message('Não foi possível carregar as contas: '+err.message,true);}
+}
+el('refreshUsers').addEventListener('click',loadUsers);

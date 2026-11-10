@@ -49,7 +49,7 @@ function showLogin(){
   $('appView').hidden=true;
   $('loginView').hidden=false;
   const msg=new URLSearchParams(location.search).get('login_error');
-  const texts={cancelado:'Login cancelado. Autorize o acesso no Discord para continuar.',discord:'Falha ao validar a autenticação no Discord. Tente novamente.',acesso:'Sua conta Discord não está autorizada. Solicite acesso ao administrador.',config:'O Discord OAuth2 ainda não foi configurado no servidor. O proprietário precisa cadastrar a aplicação uma única vez.'};
+  const texts={cancelado:'Login cancelado. Autorize o acesso no Discord para continuar.',discord:'Falha ao validar a autenticação no Discord. Tente novamente.',acesso:'Acesso não permitido. Sua conta pode estar suspensa ou o cadastro público foi desativado.',config:'O Discord OAuth2 ainda não foi configurado no servidor. O proprietário precisa cadastrar a aplicação uma única vez.'};
   $('loginError').textContent=texts[msg]||'';
   $('loginError').hidden=!texts[msg];
 }
