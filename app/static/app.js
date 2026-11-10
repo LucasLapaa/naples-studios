@@ -11,6 +11,20 @@ let busy = false;
 let jobs = [];
 let lastJobIds = new Set();
 let toastTimer;
+let previewObjectUrl = null;
+function clearMediaPreview(){
+  $('previewCard').hidden=true;
+  $('previewPlayer').pause();
+  $('previewPlayer').removeAttribute('src');
+  $('previewPlayer').load();
+  $('previewPlayer').hidden=true;
+  if(previewObjectUrl){URL.revokeObjectURL(previewObjectUrl);previewObjectUrl=null;}
+}
+function showMediaPreview(title, details){
+  $('previewTitle').textContent=title;
+  $('previewDetails').textContent=details;
+  $('previewCard').hidden=false;
+}
 
 function toast(message, error=false){
   clearTimeout(toastTimer);
@@ -52,14 +66,19 @@ function showApp(profile, config){
   }else avatar.textContent=(profile.username||'N').charAt(0).toUpperCase();
   $('creatorId').value=config.creator_id||'';
   $('creatorType').value=config.creator_type||'user';
+  $('batchCreatorId').value=config.creator_id||'';
+  $('batchCreatorType').value=config.creator_type||'user';
   if(!config.platform_links){
     $('urlHint').textContent='Links estão desativados nas configurações web. Use arquivo local ou habilite a importação no painel de administração.';
     switchSource('file');
     document.querySelector('[data-source="url"]').disabled=true;
+    document.querySelector('[data-batch-source="links"]').disabled=true;
+    switchBatchSource('files');
   }
 }
 function switchSource(type){
   currentSource=type;
+  clearMediaPreview();
   $('urlSource').hidden=type!=='url';
   $('fileSource').hidden=type!=='file';
   document.querySelectorAll('.source-option').forEach(btn=>btn.classList.toggle('active',btn.dataset.source===type));
@@ -68,7 +87,28 @@ document.querySelectorAll('.source-option').forEach(btn=>btn.addEventListener('c
 $('audioFile').addEventListener('change',()=>{
   const file=$('audioFile').files[0];
   $('fileLabel').textContent=file?`${file.name} · ${(file.size/1048576).toFixed(2)} MB`:'MP3, WAV, OGG, FLAC, M4A, WEBM · Até 50 MB';
-  if(file && !$('title').value.trim()) $('title').value=file.name.replace(/\.[^.]+$/,'').slice(0,80);
+  clearMediaPreview();
+  if(file){
+    if(!$('title').value.trim()) $('title').value=file.name.replace(/\.[^.]+$/,'').slice(0,80);
+    previewObjectUrl=URL.createObjectURL(file);
+    $('previewPlayer').src=previewObjectUrl;
+    $('previewPlayer').hidden=false;
+    showMediaPreview(file.name, `Arquivo local · ${(file.size/1048576).toFixed(2)} MB · áudio pode ser reproduzido abaixo`);
+  }
+});
+$('sourceUrl').addEventListener('input',clearMediaPreview);
+$('previewBtn').addEventListener('click',async()=>{
+  const url=$('sourceUrl').value.trim();
+  if(!url){toast('Cole um link antes de solicitar a prévia.',true);return;}
+  const btn=$('previewBtn');btn.disabled=true;btn.textContent='CONSULTANDO PLATAFORMA...';
+  clearMediaPreview();
+  try{
+    const meta=await api('/api/media/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url})});
+    const length=meta.duration?` · ${fmtDuration(meta.duration)}`:'';
+    showMediaPreview(meta.title,`${meta.platform}${length}${meta.uploader?' · '+meta.uploader:''}`);
+    if(!$('title').value.trim()) $('title').value=meta.title.slice(0,80);
+  }catch(e){toast(e.message,true);}
+  finally{btn.disabled=false;btn.textContent='♫ Ver prévia do link';}
 });
 const drop=$('dropZone');
 for(const event of ['dragover','dragenter'])drop.addEventListener(event,e=>{e.preventDefault();drop.classList.add('dragging');});
@@ -114,8 +154,10 @@ $('uploadForm').addEventListener('submit',async e=>{
 });
 function prettyDate(text){
   if(!text)return '—';
-  const value=new Date(text.replace(' ','T')+'Z');
-  if(Number.isNaN(+value))return text;
+  const iso=String(text).trim().replace(' ','T');
+  const normalized=/[Zz]$|[+-]\d{2}:\d{2}$/.test(iso)?iso:iso+'Z';
+  const value=new Date(normalized);
+  if(Number.isNaN(+value))return String(text);
   return new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short'}).format(value);
 }
 function fmtDuration(value){
@@ -162,6 +204,9 @@ async function fetchJobs(){
     }
     lastJobIds=new Set(jobs.filter(j=>j.status==='concluido').map(j=>j.id));
     renderJobs();
+    renderBatchProgress();
+    renderMonitor();
+    renderCollections();
   }catch(e){if(authorized)toast(e.message,true);}
   finally{busy=false;}
 }
@@ -218,6 +263,7 @@ async function init(){
     csrf=result.csrf;
     showApp(result.user,result.config);
     await fetchJobs();
+    await Promise.all([fetchCollections(),loadConnection()]);
   }catch(e){showLogin();}
   setInterval(()=>{
     if(authorized && jobs.some(j=>activeStatuses.has(j.status)))fetchJobs();
@@ -234,4 +280,225 @@ $('diagnosticsBtn').addEventListener('click', async()=>{
       `FFmpeg: ${d.ffmpeg}\nFFprobe: ${d.ffprobe}\nyt-dlp: ${d['yt-dlp']}\nNode: ${d.node}\n\n${d.nota}`;
     $('errorDialog').showModal();
   }catch(err){toast(err.message, true);}
+});
+
+// Naples Studios v7 — coleções, configuração pública sem segredos e moderação.
+let naplesCollections = [];
+let naplesCollectionItems = [];
+const moderationText = {
+  approved:'Aprovado', reviewing:'Em análise', rejected:'Recusado',
+  unknown:'Estado não informado', unchecked:'A conferir',
+  unavailable:'Consulta indisponível',unauthorized:'Sem acesso',not_found:'Não encontrado'
+};
+function moderationChip(state){
+  const code=['approved','reviewing','rejected'].includes(state)?state:'unchecked';
+  return `<span class="v7-chip ${code}">${safe(moderationText[state]||'A conferir')}</span>`;
+}
+async function loadConnection(){
+  try{
+    const d=await api('/api/roblox/connection');
+    $('robloxConnectionTitle').textContent=d.configured?'Chave configurada':'Configuração pendente';
+    $('robloxConnectionDetail').textContent=`Destino padrão: ${d.creator_type==='group'?'Grupo':'Usuário'} Roblox #${d.creator_id||'—'}`;
+    $('keyConnectedChip').textContent=d.configured?'CONFIGURADA':'PENDENTE';
+  }catch(e){$('robloxConnectionDetail').textContent='Não foi possível consultar a conexão.';}
+}
+function renderMonitor(){
+  if(!$('monitorList'))return;
+  const modJobs=jobs.filter(j=>j.asset_id);
+  $('modApproved').textContent=modJobs.filter(j=>j.moderation_state==='approved').length;
+  $('modReviewing').textContent=modJobs.filter(j=>j.moderation_state==='reviewing').length;
+  $('modRejected').textContent=modJobs.filter(j=>j.moderation_state==='rejected').length;
+  $('modUnchecked').textContent=modJobs.filter(j=>!['approved','reviewing','rejected'].includes(j.moderation_state)).length;
+  const search=$('searchMonitor').value.trim().toLowerCase(),filter=$('monitorFilter').value;
+  const found=modJobs.filter(j=>(!search||`${j.title} ${j.asset_id}`.toLowerCase().includes(search))&&
+      (filter==='all'||(filter==='unchecked'?!['approved','reviewing','rejected'].includes(j.moderation_state):j.moderation_state===filter)));
+  $('monitorList').innerHTML=found.map(j=>`<div class="v7-line"><div class="v7-line-main"><strong>${safe(j.title)}</strong><small>Asset ID ${safe(j.asset_id)} · ${safe(j.moderation_checked_at?'Verificado em '+prettyDate(j.moderation_checked_at):'Não consultado')}</small><small>${safe(j.moderation_message||'O ID foi criado; consulte a moderação usando o botão Verificar.')}</small></div><div class="v7-line-actions">${moderationChip(j.moderation_state||'unchecked')}<button type="button" class="mini-btn" data-monitor-copy="${safe(j.asset_id)}">Copiar ID</button></div></div>`).join('')||'<p class="v7-muted">Nenhum Asset ID encontrado no filtro atual.</p>';
+}
+$('searchMonitor').addEventListener('input',renderMonitor);
+$('monitorFilter').addEventListener('change',renderMonitor);
+$('monitorList').addEventListener('click',async e=>{
+  const btn=e.target.closest('[data-monitor-copy]');if(!btn)return;
+  try{await navigator.clipboard.writeText(btn.dataset.monitorCopy);toast('Asset ID copiado.');}catch{toast('Não foi possível copiar.',true);}
+});
+async function checkModeration(ids){
+  const result=await api('/api/monitor/check',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({job_ids:ids})});
+  await fetchJobs();
+  const errors=result.results.filter(r=>!['approved','reviewing','rejected','unknown'].includes(r.state));
+  if(errors.length){
+    $('errorDialogTitle').textContent='Diagnóstico do monitor Roblox';
+    $('errorDialogText').textContent=errors.map(r=>r.asset_id+': '+r.message).join('\n');
+    $('errorDialog').showModal();
+  }
+  toast(`Consulta finalizada para ${result.results.length} asset(s).`);
+  return result;
+}
+$('verifyMonitorBtn').addEventListener('click',async()=>{
+  const valid=jobs.filter(j=>j.asset_id).slice(0,20).map(j=>j.id);
+  if(!valid.length){toast('Não há Asset IDs para consultar.');return;}
+  const btn=$('verifyMonitorBtn');btn.disabled=true;btn.textContent='CONSULTANDO ROBLOX...';
+  try{await checkModeration(valid);}catch(e){toast(e.message,true);}finally{btn.disabled=false;btn.textContent='↻ Verificar até 20';}
+});
+$('testKeyBtn').addEventListener('click',async()=>{
+  const valid=jobs.find(j=>j.asset_id);
+  if(!valid){$('keyTestFeedback').textContent='Primeiro publique um asset com sua conta; ele será usado para testar Assets › Read.';return;}
+  const btn=$('testKeyBtn');btn.disabled=true;
+  try{
+    const result=await checkModeration([valid.id]);
+    $('keyTestFeedback').textContent=result.results[0].message;
+  }catch(e){$('keyTestFeedback').textContent=e.message;}finally{btn.disabled=false;}
+});
+async function fetchCollections(){
+  if(!authorized)return;
+  try{
+    const response=await api('/api/collections');
+    naplesCollections=response.collections||[];naplesCollectionItems=response.items||[];
+    renderCollections();
+  }catch(e){toast(e.message,true);}
+}
+function renderCollections(){
+  const sel=$('collectionSelect'),cur=sel.value;
+  sel.replaceChildren();
+  for(const c of naplesCollections){const opt=document.createElement('option');opt.value=c.id;opt.textContent=c.name;sel.append(opt);}
+  if(naplesCollections.some(c=>c.id===cur))sel.value=cur;
+  if(!naplesCollections.length){const opt=document.createElement('option');opt.textContent='Crie uma coleção primeiro';opt.value='';sel.append(opt);}
+  const jobSel=$('collectionJobSelect'),prev=jobSel.value;jobSel.replaceChildren();
+  for(const job of jobs){const opt=document.createElement('option');opt.value=job.id;opt.textContent=job.title+(job.asset_id?' · '+job.asset_id:'');jobSel.append(opt);}
+  if(jobs.some(j=>j.id===prev))jobSel.value=prev;
+  if(!jobs.length){const opt=document.createElement('option');opt.value='';opt.textContent='Nenhuma música no histórico';jobSel.append(opt);}
+  $('collectionsList').innerHTML=naplesCollections.map(c=>`<div class="v7-line"><div class="v7-line-main"><strong>${safe(c.name)}</strong><small>${c.total} música(s)</small></div><div class="v7-line-actions"><button type="button" class="mini-btn" data-col-select="${safe(c.id)}">Abrir</button><button type="button" class="mini-btn danger" data-col-delete="${safe(c.id)}">Excluir</button></div></div>`).join('')||'<p class="v7-muted">Crie sua primeira coleção para organizar o histórico.</p>';
+  renderCollectionItems();
+}
+function renderCollectionItems(){
+  if(!$('selectedCollectionItems'))return;
+  const cid=$('collectionSelect').value;
+  const ids=new Set(naplesCollectionItems.filter(x=>x.collection_id===cid).map(x=>x.job_id));
+  $('selectedCollectionItems').innerHTML=jobs.filter(j=>ids.has(j.id)).map(j=>`<div class="v7-line"><div class="v7-line-main"><strong>${safe(j.title)}</strong><small>${safe(j.asset_id||'Ainda sem Asset ID')}</small></div><button type="button" class="mini-btn danger" data-item-remove="${safe(j.id)}">Remover</button></div>`).join('')||'<p class="v7-muted">Esta coleção ainda está vazia.</p>';
+}
+$('collectionSelect').addEventListener('change',renderCollectionItems);
+$('createCollectionForm').addEventListener('submit',async e=>{
+  e.preventDefault();const name=$('newCollectionName').value.trim();if(!name)return;
+  try{
+    await api('/api/collections',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+    $('newCollectionName').value='';await fetchCollections();toast('Coleção criada.');
+  }catch(err){toast(err.message,true);}
+});
+$('addToCollectionForm').addEventListener('submit',async e=>{
+  e.preventDefault();const cid=$('collectionSelect').value,job=$('collectionJobSelect').value;
+  if(!cid||!job){toast('Selecione uma coleção e uma música.',true);return;}
+  try{await api(`/api/collections/${cid}/items/${job}`,{method:'PUT'});await fetchCollections();toast('Música adicionada à coleção.');}
+  catch(err){toast(err.message,true);}
+});
+$('collectionsList').addEventListener('click',async e=>{
+  const choose=e.target.closest('[data-col-select]'),del=e.target.closest('[data-col-delete]');
+  if(choose){$('collectionSelect').value=choose.dataset.colSelect;renderCollectionItems();$('selectedCollectionItems').scrollIntoView({behavior:'smooth',block:'nearest'});return;}
+  if(del){if(!confirm('Excluir esta coleção? Os assets e músicas não serão excluídos.'))return;
+    try{await api(`/api/collections/${del.dataset.colDelete}`,{method:'DELETE'});await fetchCollections();toast('Coleção excluída.');}
+    catch(err){toast(err.message,true);}
+  }
+});
+$('selectedCollectionItems').addEventListener('click',async e=>{
+  const btn=e.target.closest('[data-item-remove]');if(!btn)return;
+  try{await api(`/api/collections/${$('collectionSelect').value}/items/${btn.dataset.itemRemove}`,{method:'DELETE'});await fetchCollections();toast('Música removida da coleção.');}
+  catch(err){toast(err.message,true);}
+});
+
+
+// Naples v8: envio em massa GRATUITO, sem planos e sem pagamento.
+let batchSource = 'links';
+let currentBatchId = '';
+let batchFileUploading = false;
+const batchMax = 20;
+function switchBatchSource(source){
+  batchSource=source;
+  $('batchLinksBox').hidden=source!=='links';
+  $('batchFilesBox').hidden=source!=='files';
+  document.querySelectorAll('[data-batch-source]').forEach(btn=>btn.classList.toggle('active',btn.dataset.batchSource===source));
+}
+document.querySelectorAll('[data-batch-source]').forEach(btn=>btn.addEventListener('click',()=>{
+  if(!btn.disabled && !batchFileUploading) switchBatchSource(btn.dataset.batchSource);
+}));
+$('batchFiles').addEventListener('change',()=>{
+  const files=Array.from($('batchFiles').files);
+  $('batchFileNames').textContent=files.length?`${files.length} selecionado(s): ${files.slice(0,5).map(f=>f.name).join(', ')}${files.length>5?'...':''}`:'Selecione músicas próprias. Cada arquivo será enviado separadamente.';
+});
+function parseBatchLinks(raw){
+  const lines=raw.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+  if(lines.length<1||lines.length>batchMax)throw new Error('Informe de 1 a 20 links por lote.');
+  return lines.map((line,i)=>{
+    let title='';let url=line;
+    if(line.includes(' | ')){
+      const pos=line.indexOf(' | ');
+      title=line.slice(0,pos).trim();url=line.slice(pos+3).trim();
+      if(title.length<3||title.length>80)throw new Error(`Linha ${i+1}: título de 3 a 80 caracteres.`);
+    }
+    if(!/^https:\/\//i.test(url))throw new Error(`Linha ${i+1}: use uma URL HTTPS.`);
+    return {url,title};
+  });
+}
+function renderBatchProgress(){
+  if(!currentBatchId)return;
+  const selected=jobs.filter(j=>j.batch_id===currentBatchId);
+  if(!selected.length)return;
+  $('batchProgressBox').hidden=false;
+  const done=selected.filter(j=>j.status==='concluido').length;
+  const failed=selected.filter(j=>['erro','interrompido'].includes(j.status)).length;
+  const pending=selected.filter(j=>j.status==='pendente').length;
+  const finished=done+failed+pending;
+  $('batchProgressText').textContent=`${finished}/${selected.length} concluídos ou aguardando confirmação · ${done} IDs · ${failed} falhas`;
+  $('batchProgressBar').style.width=`${Math.round(finished/selected.length*100)}%`;
+  $('batchResultRows').innerHTML=selected.map(j=>`<div class="naples-batch-result"><strong>${safe(j.title)}</strong><small>${safe(statusLabels[j.status]||j.status)}${j.asset_id?' · Asset ID '+safe(j.asset_id):''}${j.error?' · '+safe(j.error.slice(0,180)):''}</small></div>`).join('');
+}
+$('batchForm').addEventListener('submit',async(e)=>{
+  e.preventDefault();
+  if(batchFileUploading)return;
+  const creator_id=$('batchCreatorId').value.trim();
+  const creator_type=$('batchCreatorType').value;
+  if(!/^[1-9]\d*$/.test(creator_id)){toast('Informe um ID Roblox numérico válido.',true);return;}
+  if(!$('batchRights').checked){toast('Confirme os direitos de todas as músicas.',true);return;}
+  const button=$('batchSubmitBtn');const label=button.querySelector('span');
+  button.disabled=true;
+  try{
+    if(batchSource==='links'){
+      const items=parseBatchLinks($('batchLinks').value);
+      label.textContent='CRIANDO LOTE...';
+      const result=await api('/api/batches/links',{
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({creator_id,creator_type,items,rights_confirmed:true})
+      });
+      currentBatchId=result.batch_id;
+      $('batchProgressBox').hidden=false;
+      toast(`${result.total} links adicionados à fila, sem custo de plano.`);
+      $('batchLinks').value='';
+    }else{
+      const files=Array.from($('batchFiles').files);
+      if(!files.length||files.length>batchMax)throw new Error('Selecione entre 1 e 20 arquivos.');
+      if(files.some(f=>f.size>50*1024*1024||!f.size))throw new Error('Cada arquivo precisa ter entre 1 byte e 50 MB.');
+      const id=globalThis.crypto?.randomUUID?.().replace(/-/g,'');
+      if(!id)throw new Error('Navegador incompatível com geração segura de identificadores.');
+      currentBatchId=id;
+      batchFileUploading=true;
+      let accepted=0;const failed=[];
+      for(let i=0;i<files.length;i++){
+        const file=files[i];
+        label.textContent=`ENVIANDO ${i+1} DE ${files.length}...`;
+        const payload=new FormData();
+        payload.set('title',(file.name.replace(/\.[^/.]+$/,'')||`Áudio ${i+1}`).slice(0,80).padEnd(3,'_'));
+        payload.set('creator_id',creator_id);
+        payload.set('creator_type',creator_type);
+        payload.set('rights_confirmed','true');
+        payload.set('batch_id',id);
+        payload.set('audio_file',file);
+        try{await api('/api/jobs',{method:'POST',body:payload});accepted++;}
+        catch(err){failed.push(`${file.name}: ${err.message}`);}
+      }
+      if(!accepted){currentBatchId='';throw new Error('Nenhum arquivo entrou na fila. '+failed[0]);}
+      $('batchFiles').value='';
+      $('batchFileNames').textContent='Selecione seus arquivos para outro lote.';
+      toast(`${accepted} arquivos adicionados. ${failed.length} não enviados.`,!!failed.length);
+      if(failed.length){$('batchProgressBox').hidden=false;$('batchProgressText').textContent=`${accepted} aceitos · ${failed.length} falhas de envio: ${failed.slice(0,2).join(' | ')}`;}
+    }
+    $('batchRights').checked=false;
+    await fetchJobs();
+  }catch(err){toast(err.message,true);}
+  finally{batchFileUploading=false;button.disabled=false;label.textContent='ADICIONAR LOTE À FILA';}
 });
