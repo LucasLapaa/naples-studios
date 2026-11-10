@@ -7,6 +7,7 @@ import re
 import secrets
 import shutil
 import time
+from datetime import datetime, timezone
 import uuid
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
@@ -19,9 +20,10 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import config, database as db, settings_store as store
+from .asset_monitor import inspect_asset
 from .core import (
     MAX_FILE_BYTES, ProcessingError, PlatformAccessError, convert_2_5x, create_roblox_asset,
-    download_platform, platform_from_url, poll_roblox_asset, valid_creator_id, valid_title
+    download_platform, platform_from_url, preview_platform, poll_roblox_asset, valid_creator_id, valid_title
 )
 
 EXPORTS = config.DATA / 'exports'
@@ -30,6 +32,9 @@ TASKS: set[asyncio.Task] = set()
 QUEUE = asyncio.Semaphore(2)
 RATES = defaultdict(deque)
 ID_RE = re.compile(r'^[0-9a-f]{32}$')
+BATCH_LIMIT = 20           # limite operacional por lote; não é limite de plano pago
+MAX_ACTIVE_JOBS = 60       # evita sobrecarregar a única instância do Railway
+
 
 
 def hashed(raw: str) -> str:
@@ -137,7 +142,7 @@ async def security_headers(request: Request, call_next):
     response.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
     response.headers['Content-Security-Policy'] = (
         "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https://cdn.discordapp.com data:; "
-        "connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+        "connect-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
     )
     if request.url.path.startswith(('/api/', '/auth/')):
         response.headers['Cache-Control'] = 'no-store'
@@ -436,7 +441,7 @@ def session(request: Request):
         'config': {
             'platform_links': config.ENABLE_PLATFORM_LINKS, 'speed': 2.5,
             'creator_id': config.ROBLOX_CREATOR_ID, 'creator_type': config.ROBLOX_CREATOR_TYPE,
-            'version': '2.0', 'allowed_creator_ids': sorted(config.ROBLOX_ALLOWED_CREATOR_IDS)
+            'version': '7.0', 'allowed_creator_ids': sorted(config.ROBLOX_ALLOWED_CREATOR_IDS)
         }
     }
 
@@ -483,6 +488,23 @@ def system_diagnostics(request: Request):
     return versions
 
 
+@app.post('/api/media/preview')
+async def media_preview(request: Request):
+    user = authorize_request(request, mutate=True)
+    rate('preview:' + user['discord_id'], 12, 900)
+    if not config.ENABLE_PLATFORM_LINKS:
+        raise HTTPException(403, 'Importação de links não está habilitada pelo administrador.')
+    data = await request.json()
+    url = data.get('url', '') if isinstance(data, dict) else ''
+    try:
+        if not isinstance(url, str):
+            raise ProcessingError('Informe uma URL válida.')
+        platform_from_url(url)
+        return await asyncio.to_thread(preview_platform, url)
+    except ProcessingError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
 @app.get('/api/jobs')
 def jobs(request: Request):
     user = authorize_request(request)
@@ -492,9 +514,10 @@ def jobs(request: Request):
 @app.post('/api/jobs', status_code=202)
 async def submit_job(request: Request, title: str = Form(...), creator_id: str = Form(''),
                      creator_type: str = Form(''), source_url: str = Form(''),
-                     rights_confirmed: str = Form('false'), audio_file: UploadFile | None = File(None)):
+                     rights_confirmed: str = Form('false'), batch_id: str = Form(''),
+                     audio_file: UploadFile | None = File(None)):
     user = authorize_request(request, mutate=True)
-    rate('publish:' + user['discord_id'], 15, 3600)
+    rate('publish:' + user['discord_id'], 80, 3600)
     try:
         title = valid_title(title)
         creator_id = valid_creator_id(creator_id or config.ROBLOX_CREATOR_ID)
@@ -521,6 +544,13 @@ async def submit_job(request: Request, title: str = Form(...), creator_id: str =
     except ProcessingError as exc:
         raise HTTPException(400, str(exc)) from exc
 
+    if db.count_active_jobs(user['discord_id']) >= MAX_ACTIVE_JOBS:
+        raise HTTPException(429, 'A fila está cheia. Aguarde a conclusão de algumas músicas.')
+    if batch_id:
+        if not ID_RE.fullmatch(batch_id):
+            raise HTTPException(400, 'Identificador do lote inválido.')
+        if db.count_batch_jobs(batch_id, user['discord_id']) >= BATCH_LIMIT:
+            raise HTTPException(429, 'Este lote atingiu o limite de 20 músicas.')
     job_id = uuid.uuid4().hex
     local = None
     if has_file:
@@ -540,11 +570,82 @@ async def submit_job(request: Request, title: str = Form(...), creator_id: str =
         except Exception:
             shutil.rmtree(work, ignore_errors=True)
             raise
-    db.create_job(job_id, user['discord_id'], title, platform, url if url else (audio_file.filename or 'arquivo'), creator_id, creator_type)
+    db.create_job(job_id, user['discord_id'], title, platform, url if url else (audio_file.filename or 'arquivo'), creator_id, creator_type, batch_id or None)
     task = asyncio.create_task(run_job(job_id, local, url, title, creator_id, creator_type))
     TASKS.add(task)
     task.add_done_callback(TASKS.discard)
-    return {'job_id': job_id, 'status': 'fila'}
+    return {'job_id': job_id, 'status': 'fila', 'batch_id': batch_id or None}
+
+
+
+
+@app.post('/api/batches/links', status_code=202)
+async def submit_link_batch(request: Request):
+    # Até 20 jobs com links; nunca contorna verificações da fonte.
+    user = authorize_request(request, mutate=True)
+    rate('batchlinks:' + user['discord_id'], 4, 3600)
+    if not config.ENABLE_PLATFORM_LINKS:
+        raise HTTPException(403, 'Importação por links desativada nas configurações.')
+    try:
+        data = await request.json()
+        if not isinstance(data, dict) or data.get('rights_confirmed') is not True:
+            raise ProcessingError('Confirme os direitos de uso de todas as músicas do lote.')
+        cid = valid_creator_id(data.get('creator_id') or config.ROBLOX_CREATOR_ID)
+        ctype = data.get('creator_type') or config.ROBLOX_CREATOR_TYPE
+        if ctype not in ('user','group'):
+            raise ProcessingError('Destino Roblox inválido.')
+        if config.ROBLOX_ALLOWED_CREATOR_IDS and cid not in config.ROBLOX_ALLOWED_CREATOR_IDS:
+            raise ProcessingError('Destino Roblox não autorizado pelo administrador.')
+        items = data.get('items')
+        if not isinstance(items, list) or not 1 <= len(items) <= BATCH_LIMIT:
+            raise ProcessingError('Informe entre 1 e 20 links por lote.')
+        if db.count_active_jobs(user['discord_id']) + len(items) > MAX_ACTIVE_JOBS:
+            raise HTTPException(429, 'Fila cheia. Aguarde a conclusão de algumas músicas.')
+        records=[]
+        seen=set()
+        for index,item in enumerate(items,1):
+            if not isinstance(item,dict):
+                raise ProcessingError(f'Linha {index}: entrada inválida.')
+            url=item.get('url')
+            if not isinstance(url,str):
+                raise ProcessingError(f'Linha {index}: link inválido.')
+            url=url.strip()
+            platform=platform_from_url(url)
+            if url in seen:
+                raise ProcessingError(f'Linha {index}: link repetido neste lote.')
+            seen.add(url)
+            name=item.get('title') or f'Naples Studio - faixa {index:02d}'
+            title=valid_title(name)
+            records.append({'id':uuid.uuid4().hex,'url':url,'title':title,'platform':platform})
+    except ProcessingError as exc:
+        raise HTTPException(400,str(exc)) from exc
+    batch_id=uuid.uuid4().hex
+    db.create_batch_jobs(user['discord_id'], batch_id, records, cid, ctype)
+    for item in records:
+        task=asyncio.create_task(run_job(item['id'], None, item['url'], item['title'], cid, ctype))
+        TASKS.add(task)
+        task.add_done_callback(TASKS.discard)
+    return {'batch_id':batch_id, 'total':len(records),
+            'job_ids':[item['id'] for item in records], 'status':'fila'}
+
+
+@app.get('/api/batches/{batch_id}')
+def batch_status(batch_id: str, request: Request):
+    user=authorize_request(request)
+    if not ID_RE.fullmatch(batch_id):
+        raise HTTPException(400,'Identificador inválido.')
+    with db.connect() as conn:
+        rows=conn.execute('''SELECT * FROM jobs WHERE discord_user_id=? AND batch_id=?
+            ORDER BY created_at, rowid''',(user['discord_id'],batch_id)).fetchall()
+    if not rows:
+        raise HTTPException(404,'Lote não encontrado.')
+    counts={'total':len(rows),'concluidos':0,'falhas':0,'ativos':0,'pendentes':0}
+    for row in rows:
+        if row['status']=='concluido': counts['concluidos']+=1
+        elif row['status'] in ('erro','interrompido'): counts['falhas']+=1
+        elif row['status']=='pendente': counts['pendentes']+=1
+        else: counts['ativos']+=1
+    return {'batch_id':batch_id, **counts,'jobs':[job_json(row) for row in rows]}
 
 
 @app.post('/api/jobs/{job_id}/verify')
@@ -591,8 +692,125 @@ def delete_job(job_id: str, request: Request):
     if row['status'] in ('fila', 'processando', 'enviando', 'confirmando'):
         raise HTTPException(409, 'Aguarde terminar o processamento.')
     with db.connect() as conn:
+        conn.execute('DELETE FROM collection_items WHERE job_id=?', (job_id,))
         conn.execute('DELETE FROM jobs WHERE id=? AND discord_user_id=?', (job_id, user['discord_id']))
     (EXPORTS / f'{job_id}.mp3').unlink(missing_ok=True)
+    return {'ok': True}
+
+# Naples Studios v7: coleções particulares e monitor de moderação (sem Premium).
+@app.get('/api/roblox/connection')
+def roblox_connection(request: Request):
+    authorize_request(request)
+    return {'configured': bool(config.ROBLOX_API_KEY),
+            'creator_type': config.ROBLOX_CREATOR_TYPE,
+            'creator_id': config.ROBLOX_CREATOR_ID,
+            'note': 'API Key administrada em Configurações, nunca exposta aqui.'}
+
+
+@app.post('/api/monitor/check')
+async def monitor_check(request: Request):
+    user = authorize_request(request, mutate=True)
+    rate('moderation:' + user['discord_id'], 6, 3600)
+    data = await request.json()
+    ids = data.get('job_ids', []) if isinstance(data, dict) else None
+    if not isinstance(ids, list) or not 1 <= len(ids) <= 20 or any(not isinstance(i, str) or not ID_RE.fullmatch(i) for i in ids):
+        raise HTTPException(400, 'Selecione entre 1 e 20 registros do seu histórico.')
+    if len(ids) != len(set(ids)):
+        raise HTTPException(400, 'Não repita registros.')
+    rows = [db.get_job(job_id, user['discord_id']) for job_id in ids]
+    if any(row is None or not row['asset_id'] for row in rows):
+        raise HTTPException(404, 'Algum registro não possui Asset ID ou não pertence à sua conta.')
+    guard = asyncio.Semaphore(4)
+    async def check(row):
+        async with guard:
+            result = await asyncio.to_thread(inspect_asset, row['asset_id'], config.ROBLOX_API_KEY)
+            if result['state'] in ('approved', 'reviewing', 'rejected', 'unknown'):
+                db.update_job(row['id'], moderation_state=result['state'],
+                              moderation_message=result['message'],
+                              moderation_checked_at=datetime.now(timezone.utc).isoformat())
+            return {'job_id': row['id'], 'asset_id': row['asset_id'], **result}
+    return {'results': await asyncio.gather(*(check(row) for row in rows))}
+
+
+@app.get('/api/collections')
+def collections(request: Request):
+    user = authorize_request(request)
+    with db.connect() as conn:
+        rows = conn.execute('''SELECT c.id, c.name, c.created_at, COUNT(ci.job_id) AS total
+                               FROM collections c LEFT JOIN collection_items ci ON ci.collection_id=c.id
+                               WHERE c.discord_user_id=?
+                               GROUP BY c.id ORDER BY c.created_at DESC, c.rowid DESC''',
+                            (user['discord_id'],)).fetchall()
+        relations = conn.execute('''SELECT ci.collection_id, ci.job_id FROM collection_items ci
+                                    JOIN collections c ON c.id=ci.collection_id
+                                    WHERE c.discord_user_id=?''', (user['discord_id'],)).fetchall()
+    return {'collections': [dict(row) for row in rows],
+            'items': [dict(row) for row in relations]}
+
+
+@app.post('/api/collections', status_code=201)
+async def create_collection(request: Request):
+    user = authorize_request(request, mutate=True)
+    data = await request.json()
+    name = data.get('name', '') if isinstance(data, dict) else ''
+    if not isinstance(name, str) or not 2 <= len(name.strip()) <= 50:
+        raise HTTPException(400, 'Nome da coleção precisa ter entre 2 e 50 caracteres.')
+    name = name.strip()
+    collection_id = uuid.uuid4().hex
+    with db.connect() as conn:
+        count = conn.execute('SELECT COUNT(*) FROM collections WHERE discord_user_id=?',
+                             (user['discord_id'],)).fetchone()[0]
+        if count >= 40:
+            raise HTTPException(429, 'Limite de 40 coleções por conta.')
+        conn.execute('INSERT INTO collections (id,discord_user_id,name) VALUES (?,?,?)',
+                     (collection_id, user['discord_id'], name))
+    return {'id': collection_id, 'name': name}
+
+
+@app.delete('/api/collections/{collection_id}')
+def delete_collection(collection_id: str, request: Request):
+    user = authorize_request(request, mutate=True)
+    if not ID_RE.fullmatch(collection_id):
+        raise HTTPException(400, 'Coleção inválida.')
+    with db.connect() as conn:
+        row = conn.execute('SELECT id FROM collections WHERE id=? AND discord_user_id=?',
+                           (collection_id, user['discord_id'])).fetchone()
+        if row is None:
+            raise HTTPException(404, 'Coleção não encontrada.')
+        conn.execute('DELETE FROM collection_items WHERE collection_id=?', (collection_id,))
+        conn.execute('DELETE FROM collections WHERE id=? AND discord_user_id=?', (collection_id, user['discord_id']))
+    return {'ok': True}
+
+
+@app.put('/api/collections/{collection_id}/items/{job_id}')
+def add_collection_item(collection_id: str, job_id: str, request: Request):
+    user = authorize_request(request, mutate=True)
+    if not ID_RE.fullmatch(collection_id) or not ID_RE.fullmatch(job_id):
+        raise HTTPException(400, 'IDs inválidos.')
+    with db.connect() as conn:
+        row = conn.execute('SELECT id FROM collections WHERE id=? AND discord_user_id=?',
+                           (collection_id, user['discord_id'])).fetchone()
+        job = conn.execute('SELECT id FROM jobs WHERE id=? AND discord_user_id=?',
+                           (job_id, user['discord_id'])).fetchone()
+        if not row or not job:
+            raise HTTPException(404, 'Coleção ou música não encontrada.')
+        conn.execute('INSERT OR IGNORE INTO collection_items (collection_id,job_id) VALUES (?,?)',
+                     (collection_id, job_id))
+    return {'ok': True}
+
+
+@app.delete('/api/collections/{collection_id}/items/{job_id}')
+def delete_collection_item(collection_id: str, job_id: str, request: Request):
+    user = authorize_request(request, mutate=True)
+    if not ID_RE.fullmatch(collection_id) or not ID_RE.fullmatch(job_id):
+        raise HTTPException(400, 'IDs inválidos.')
+    with db.connect() as conn:
+        row = conn.execute('SELECT id FROM collections WHERE id=? AND discord_user_id=?',
+                           (collection_id, user['discord_id'])).fetchone()
+        if not row:
+            raise HTTPException(404, 'Coleção não encontrada.')
+        conn.execute('DELETE FROM collection_items WHERE collection_id=? AND job_id=?',
+                     (collection_id, job_id))
     return {'ok': True}
 
 
