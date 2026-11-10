@@ -98,7 +98,7 @@ def process_job(job_id: str, local: Path | None, url: str, title: str, creator_i
         else:
             db.update_job(job_id, status='pendente', stage='Roblox ainda processando. Use Verificar operação.')
     except PlatformAccessError as exc:
-        db.update_job(job_id, status='erro', stage='Importação da plataforma indisponível', error=str(exc)[:750])
+        db.update_job(job_id, status='erro', stage=f'Falha na fonte [{exc.code}]', error=str(exc)[:750])
     except ProcessingError as exc:
         db.update_job(job_id, status='erro', stage='Erro de processamento', error=str(exc)[:750])
     except Exception as exc:
@@ -460,6 +460,27 @@ def logout(request: Request):
     resp = JSONResponse({'ok': True})
     resp.delete_cookie(config.SESSION_COOKIE, path='/')
     return resp
+
+
+@app.get('/api/system/diagnostics')
+def system_diagnostics(request: Request):
+    """Ferramentas locais apenas. Não promete acesso ao YouTube/SoundCloud."""
+    authorize_request(request)
+    versions = {}
+    for tool, args in (
+        ('ffmpeg', ['ffmpeg', '-version']),
+        ('ffprobe', ['ffprobe', '-version']),
+        ('yt-dlp', ['yt-dlp', '--version']),
+        ('node', ['node', '--version']),
+    ):
+        try:
+            proc = __import__('subprocess').run(args, capture_output=True, text=True, timeout=8)
+            raw = (proc.stdout or proc.stderr or '').splitlines()
+            versions[tool] = (raw[0][:110] if raw and proc.returncode == 0 else 'erro')
+        except (FileNotFoundError, __import__('subprocess').TimeoutExpired):
+            versions[tool] = 'indisponível'
+    versions['nota'] = 'Ferramentas instaladas não garantem que sites externos permitirão downloads.'
+    return versions
 
 
 @app.get('/api/jobs')
