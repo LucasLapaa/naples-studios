@@ -20,7 +20,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import config, database as db, settings_store as store
 from .core import (
-    MAX_FILE_BYTES, ProcessingError, convert_2_5x, create_roblox_asset,
+    MAX_FILE_BYTES, ProcessingError, PlatformAccessError, convert_2_5x, create_roblox_asset,
     download_platform, platform_from_url, poll_roblox_asset, valid_creator_id, valid_title
 )
 
@@ -97,6 +97,8 @@ def process_job(job_id: str, local: Path | None, url: str, title: str, creator_i
             db.update_job(job_id, status='concluido', asset_id=asset_id, error=None, stage='ID criado; moderação e permissões ainda podem estar pendentes')
         else:
             db.update_job(job_id, status='pendente', stage='Roblox ainda processando. Use Verificar operação.')
+    except PlatformAccessError as exc:
+        db.update_job(job_id, status='erro', stage='Importação da plataforma indisponível', error=str(exc)[:750])
     except ProcessingError as exc:
         db.update_job(job_id, status='erro', stage='Erro de processamento', error=str(exc)[:750])
     except Exception as exc:
