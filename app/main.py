@@ -83,7 +83,7 @@ def job_json(row):
     return d
 
 
-def process_job(job_id: str, local: Path | None, url: str, title: str, creator_id: str, creator_type: str):
+def process_job(job_id: str, local: Path | None, url: str, title: str, creator_id: str, creator_type: str, api_key: str):
     work = TEMP / job_id
     work.mkdir(parents=True, exist_ok=True)
     try:
@@ -96,9 +96,9 @@ def process_job(job_id: str, local: Path | None, url: str, title: str, creator_i
         metadata = convert_2_5x(source, EXPORTS / f'{job_id}.mp3')
         db.update_job(job_id, **metadata)
         db.update_job(job_id, status='enviando', stage='Criando asset no Roblox Open Cloud')
-        operation = create_roblox_asset(EXPORTS / f'{job_id}.mp3', title, creator_id, creator_type, config.ROBLOX_API_KEY)
+        operation = create_roblox_asset(EXPORTS / f'{job_id}.mp3', title, creator_id, creator_type, api_key)
         db.update_job(job_id, status='confirmando', operation=operation, stage='Aguardando Roblox emitir Asset ID')
-        asset_id = poll_roblox_asset(operation, config.ROBLOX_API_KEY)
+        asset_id = poll_roblox_asset(operation, api_key)
         if asset_id:
             db.update_job(job_id, status='concluido', asset_id=asset_id, error=None, stage='ID criado; moderação e permissões ainda podem estar pendentes')
         else:
@@ -124,7 +124,12 @@ async def lifespan(app: FastAPI):
     db.initialize()
     store.initialize()
     config.reload_settings()
-    if not store.has_admin():
+    # Sessões seguras funcionam mesmo sem conta administrativa/Roblox cadastrada.
+    # Se já existir um SESSION_SECRET, não alteramos (mantém sessões existentes).
+    if not config.SESSION_SECRET:
+        store.set_values({'session_secret': secrets.token_urlsafe(64)})
+        config.reload_settings()
+    if not store.has_admin() and os.getenv('NAPLES_SHOW_LEGACY_SETUP', '0') == '1':
         print('\n[ NAPLES STUDIOS ] Primeiro acesso pelo navegador: http://127.0.0.1:8000/configuracoes')
         print('[ NAPLES STUDIOS ] Código de ativação (necessário no Docker/acesso via proxy): ' + store.setup_code() + '\n', flush=True)
     yield
@@ -402,8 +407,8 @@ def admin_logout(request: Request):
 
 @app.get('/auth/discord')
 def discord_login(request: Request):
-    if not config.ready():
-        return RedirectResponse('/configuracoes', status_code=303)
+    if not config.oauth_ready():
+        return RedirectResponse('/?login_error=config', status_code=303)
     rate('login:' + (request.client.host if request.client else 'unknown'), 20, 600)
     state = secrets.token_urlsafe(36)
     with db.connect() as conn:
@@ -476,9 +481,61 @@ async def discord_callback(request: Request, code: str = '', state: str = '', er
     return resp
 
 
+
+
+def current_roblox_credential(discord_id: str):
+    user_key = store.load_discord_roblox_key(discord_id)
+    if user_key is not None: return user_key if user_key['api_key'] else None
+    # Preserve the operator's previous Roblox configuration after migration.
+    if (config.ROBLOX_API_KEY and config.ROBLOX_CREATOR_ID and
+            discord_id in config.DISCORD_ALLOWED_USER_IDS):
+        return {'api_key': config.ROBLOX_API_KEY,
+                'creator_type': config.ROBLOX_CREATOR_TYPE,
+                'creator_id': config.ROBLOX_CREATOR_ID, 'legacy': True}
+    return None
+
+
+@app.get('/api/auth/availability')
+def auth_availability():
+    return {'discord_available':config.oauth_ready()}
+
+
+@app.put('/api/roblox/connection')
+async def connect_roblox(request: Request):
+    user = authorize_request(request, mutate=True)
+    rate('key:' + user['discord_id'], 12, 3600)
+    payload = await request.json()
+    if not isinstance(payload, dict): raise HTTPException(400, 'Dados inválidos.')
+    key = payload.get('api_key', '')
+    if not isinstance(key, str) or not 16 <= len(key.strip()) <= 5000:
+        raise HTTPException(400, 'Cole sua API Key completa do Roblox Open Cloud.')
+    try:
+        info = await asyncio.to_thread(inspect_key, key.strip())
+    except KeyInspectionError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    # Para grupos: só selecionar automaticamente se há exatamente um grupo permitido.
+    preferred_type, preferred_id = info.get('default_creator_type'), info.get('default_creator_id')
+    requested_type = payload.get('creator_type') or preferred_type
+    requested_id = str(payload.get('creator_id') or '').strip() or (preferred_id if requested_type == preferred_type else None)
+    if requested_type not in ('user','group') or not requested_id:
+        raise HTTPException(422, 'Não foi possível determinar um destino único. Informe o ID do grupo nesta aba.')
+    if not allowed_destination(info, requested_type, requested_id):
+        raise HTTPException(403, 'Essa API Key não tem Assets > Write para o destino selecionado.')
+    store.save_discord_roblox_key(user['discord_id'], key.strip(), requested_type, requested_id)
+    return {'configured':True, 'creator_type':requested_type, 'creator_id':requested_id,
+            'message':'Chave validada e salva com segurança.'}
+
+
+@app.delete('/api/roblox/connection')
+def disconnect_roblox(request: Request):
+    user = authorize_request(request, mutate=True)
+    store.delete_discord_roblox_key(user['discord_id'])
+    return {'configured':False, 'message':'Chave pessoal desconectada.'}
+
 @app.get('/api/session')
 def session(request: Request):
     user = require_session(request)
+    roblox = current_roblox_credential(user['discord_id'])
     # CSRF: valor derivado? Guardamos apenas hash; geramos um segundo token de sessão de acesso
     # usando HMAC estável a partir de token de cookie e um segredo de aplicação no servidor.
     return {
@@ -487,8 +544,8 @@ def session(request: Request):
         'csrf': derive_csrf(request.cookies[config.SESSION_COOKIE]),
         'config': {
             'platform_links': config.ENABLE_PLATFORM_LINKS, 'speed': 2.5,
-            'creator_id': config.ROBLOX_CREATOR_ID, 'creator_type': config.ROBLOX_CREATOR_TYPE,
-            'version': '9.0', 'allowed_creator_ids': sorted(config.ROBLOX_ALLOWED_CREATOR_IDS)
+            'creator_id': roblox['creator_id'] if roblox else '', 'creator_type': roblox['creator_type'] if roblox else 'user',
+            'version': '10.0', 'roblox_connected': bool(roblox)
         }
     }
 
@@ -567,12 +624,12 @@ async def submit_job(request: Request, title: str = Form(...), creator_id: str =
     rate('publish:' + user['discord_id'], 80, 3600)
     try:
         title = valid_title(title)
-        creator_id = valid_creator_id(config.ROBLOX_CREATOR_ID)
-        creator_type = config.ROBLOX_CREATOR_TYPE
-        if creator_type not in ('user', 'group'):
-            raise ProcessingError('Escolha usuário ou grupo Roblox.')
-        if config.ROBLOX_ALLOWED_CREATOR_IDS and creator_id not in config.ROBLOX_ALLOWED_CREATOR_IDS:
-            raise ProcessingError('Este destino Roblox não está autorizado pelo administrador.')
+        connection = current_roblox_credential(user['discord_id'])
+        if not connection:
+            raise ProcessingError('Conecte sua API Key na aba Roblox Key antes do upload.')
+        creator_id = valid_creator_id(connection['creator_id'])
+        creator_type = connection['creator_type']
+        api_key = connection['api_key']
         if rights_confirmed != 'true':
             raise ProcessingError('Confirme que possui os direitos necessários para processar e publicar o áudio.')
         url = source_url.strip()
@@ -618,7 +675,7 @@ async def submit_job(request: Request, title: str = Form(...), creator_id: str =
             shutil.rmtree(work, ignore_errors=True)
             raise
     db.create_job(job_id, user['discord_id'], title, platform, url if url else (audio_file.filename or 'arquivo'), creator_id, creator_type, batch_id or None)
-    task = asyncio.create_task(run_job(job_id, local, url, title, creator_id, creator_type))
+    task = asyncio.create_task(run_job(job_id, local, url, title, creator_id, creator_type, api_key))
     TASKS.add(task)
     task.add_done_callback(TASKS.discard)
     return {'job_id': job_id, 'status': 'fila', 'batch_id': batch_id or None}
@@ -637,12 +694,11 @@ async def submit_link_batch(request: Request):
         data = await request.json()
         if not isinstance(data, dict) or data.get('rights_confirmed') is not True:
             raise ProcessingError('Confirme os direitos de uso de todas as músicas do lote.')
-        cid = valid_creator_id(config.ROBLOX_CREATOR_ID)
-        ctype = config.ROBLOX_CREATOR_TYPE
-        if ctype not in ('user','group'):
-            raise ProcessingError('Destino Roblox inválido.')
-        if config.ROBLOX_ALLOWED_CREATOR_IDS and cid not in config.ROBLOX_ALLOWED_CREATOR_IDS:
-            raise ProcessingError('Destino Roblox não autorizado pelo administrador.')
+        connection = current_roblox_credential(user['discord_id'])
+        if not connection: raise ProcessingError('Conecte sua Roblox Key antes de enviar o lote.')
+        cid = valid_creator_id(connection['creator_id'])
+        ctype = connection['creator_type']
+        api_key = connection['api_key']
         items = data.get('items')
         if not isinstance(items, list) or not 1 <= len(items) <= BATCH_LIMIT:
             raise ProcessingError('Informe entre 1 e 20 links por lote.')
@@ -669,7 +725,7 @@ async def submit_link_batch(request: Request):
     batch_id=uuid.uuid4().hex
     db.create_batch_jobs(user['discord_id'], batch_id, records, cid, ctype)
     for item in records:
-        task=asyncio.create_task(run_job(item['id'], None, item['url'], item['title'], cid, ctype))
+        task=asyncio.create_task(run_job(item['id'], None, item['url'], item['title'], cid, ctype, api_key))
         TASKS.add(task)
         task.add_done_callback(TASKS.discard)
     return {'batch_id':batch_id, 'total':len(records),
@@ -706,8 +762,10 @@ async def verify_job(job_id: str, request: Request):
     if row['status'] not in ('erro', 'pendente', 'interrompido') or not row['operation']:
         raise HTTPException(409, 'Não existe uma operação pendente para verificar.')
     rate('verify:' + user['discord_id'], 20, 3600)
+    connection = current_roblox_credential(user['discord_id'])
+    if not connection: raise HTTPException(409,'Conecte a Roblox Key para verificar a operação.')
     try:
-        asset_id = await asyncio.to_thread(poll_roblox_asset, row['operation'], config.ROBLOX_API_KEY, None, 5, 2)
+        asset_id = await asyncio.to_thread(poll_roblox_asset, row['operation'], connection['api_key'], None, 5, 2)
     except ProcessingError as exc:
         raise HTTPException(502, str(exc)) from exc
     if asset_id:
@@ -747,11 +805,12 @@ def delete_job(job_id: str, request: Request):
 # Naples Studios v7: coleções particulares e monitor de moderação (sem Premium).
 @app.get('/api/roblox/connection')
 def roblox_connection(request: Request):
-    authorize_request(request)
-    return {'configured': bool(config.ROBLOX_API_KEY),
-            'creator_type': config.ROBLOX_CREATOR_TYPE,
-            'creator_id': config.ROBLOX_CREATOR_ID,
-            'note': 'API Key administrada em Configurações, nunca exposta aqui.'}
+    user = authorize_request(request)
+    key = current_roblox_credential(user['discord_id'])
+    return {'configured': bool(key),
+            'creator_type': key['creator_type'] if key else '',
+            'creator_id': key['creator_id'] if key else '',
+            'note': 'Chave criptografada no servidor e vinculada à conta Discord.'}
 
 
 @app.post('/api/monitor/check')
@@ -767,10 +826,12 @@ async def monitor_check(request: Request):
     rows = [db.get_job(job_id, user['discord_id']) for job_id in ids]
     if any(row is None or not row['asset_id'] for row in rows):
         raise HTTPException(404, 'Algum registro não possui Asset ID ou não pertence à sua conta.')
+    connection = current_roblox_credential(user['discord_id'])
+    if not connection: raise HTTPException(409, 'Conecte a Roblox Key antes de verificar IDs.')
     guard = asyncio.Semaphore(4)
     async def check(row):
         async with guard:
-            result = await asyncio.to_thread(inspect_asset, row['asset_id'], config.ROBLOX_API_KEY)
+            result = await asyncio.to_thread(inspect_asset, row['asset_id'], connection['api_key'])
             if result['state'] in ('approved', 'reviewing', 'rejected', 'unknown'):
                 db.update_job(row['id'], moderation_state=result['state'],
                               moderation_message=result['message'],

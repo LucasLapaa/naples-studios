@@ -183,3 +183,34 @@ def expire_admin_session(token):
     with connect() as c:
         c.execute('DELETE FROM admin_sessions WHERE token_hash=?', (hashlib.sha256(token.encode()).hexdigest(),))
         c.commit()
+
+
+def save_discord_roblox_key(discord_id: str, api_key: str, creator_type: str, creator_id: str):
+    # Encrypt each operator Roblox credentials at rest; never return the key.
+    if not discord_id.isdigit() or creator_type not in ('user','group') or not creator_id.isdigit():
+        raise ValueError('Identificadores de credencial inválidos.')
+    payload = _cipher().encrypt(json.dumps({'api_key': api_key}).encode('utf-8'))
+    with connect() as con:
+        con.execute('''INSERT INTO user_roblox_credentials
+            (discord_id, secret_payload, creator_type, creator_id) VALUES (?, ?, ?, ?)
+            ON CONFLICT(discord_id) DO UPDATE SET secret_payload=excluded.secret_payload,
+            creator_type=excluded.creator_type, creator_id=excluded.creator_id''',
+            (discord_id, payload, creator_type, creator_id))
+        con.commit()
+
+def load_discord_roblox_key(discord_id: str):
+    with connect() as con:
+        row = con.execute('SELECT * FROM user_roblox_credentials WHERE discord_id=?', (discord_id,)).fetchone()
+    if row is None: return None
+    data = json.loads(_cipher().decrypt(row['secret_payload']).decode('utf-8'))
+    return {'api_key':data['api_key'], 'creator_type':row['creator_type'], 'creator_id':row['creator_id']}
+
+def delete_discord_roblox_key(discord_id: str):
+    # Encrypted tombstone prevents fallback to the legacy shared key.
+    payload = _cipher().encrypt(json.dumps({'api_key': ''}).encode('utf-8'))
+    with connect() as con:
+        con.execute('''INSERT INTO user_roblox_credentials
+            (discord_id, secret_payload, creator_type, creator_id) VALUES (?, ?, 'user', '')
+            ON CONFLICT(discord_id) DO UPDATE SET secret_payload=excluded.secret_payload,
+            creator_type='user', creator_id='' ''', (discord_id, payload))
+        con.commit()

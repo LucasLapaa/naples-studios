@@ -53,6 +53,12 @@ def initialize():
         db.execute('''CREATE TABLE IF NOT EXISTS oauth_states (
             state_hash TEXT PRIMARY KEY, expires_at INTEGER NOT NULL
         )''')
+        # v10: chave Roblox individual do Discord, criptografada via settings_store.
+        db.execute('''CREATE TABLE IF NOT EXISTS user_roblox_credentials (
+            discord_id TEXT PRIMARY KEY, secret_payload BLOB NOT NULL,
+            creator_type TEXT NOT NULL, creator_id TEXT NOT NULL,
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )''')
         # v7: monitor de moderação e coleções são separados do status de upload.
         for col in (
             "moderation_state TEXT NOT NULL DEFAULT 'unchecked'",

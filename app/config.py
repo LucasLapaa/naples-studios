@@ -32,7 +32,10 @@ def reload_settings():
     from . import settings_store
     persisted = settings_store.read_values()
     def get(k, env='', default=''):
-        return persisted[k] if k in persisted else os.getenv(env, default) if env else default
+        # Recupera configurações anteriores, mas permite Railway Variables
+        # preencher OAuth2 caso o valor persistido esteja vazio.
+        saved = persisted.get(k)
+        return saved if saved not in ('', None) else (os.getenv(env, default) if env else default)
     global APP_BASE_URL, DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DISCORD_ALLOWED_USER_IDS
     global ROBLOX_API_KEY, ROBLOX_CREATOR_ID, ROBLOX_CREATOR_TYPE, ROBLOX_ALLOWED_CREATOR_IDS
     global ENABLE_PLATFORM_LINKS, COOKIE_SECURE, SESSION_SECRET
@@ -82,3 +85,10 @@ def validate_settings(values):
     if not all(x.isdigit() for x in allowed):
         raise ValueError('IDs Roblox permitidos precisam ser numéricos.')
     return base
+
+
+def oauth_ready():
+    """Discord OAuth is application-level; Roblox is set after login per user."""
+    return (DISCORD_CLIENT_ID.isdigit() and bool(DISCORD_CLIENT_SECRET) and
+            bool(DISCORD_ALLOWED_USER_IDS) and all(i.isdigit() for i in DISCORD_ALLOWED_USER_IDS) and
+            len(SESSION_SECRET) >= 32)
