@@ -3,7 +3,7 @@
   "rewrites": [
     {
       "source": "/:path*",
-      "destination": "naples-studios-production.up.railway.app/:path*"
+      "destination": "https://naples-studios-production.up.railway.app/:path*"
     }
   ]
 }
