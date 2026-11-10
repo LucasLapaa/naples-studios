@@ -2,7 +2,7 @@
 const $ = id => document.getElementById(id);
 const liveStatuses = new Set(['fila','processando','enviando','confirmando']);
 const activeStatuses = new Set([...liveStatuses,'pendente']);
-const statusLabels = {fila:'Na fila',processando:'Processando',enviando:'Enviando',confirmando:'Confirmando',pendente:'Pendente',concluido:'Concluído',interrompido:'Interrompido',erro:'Falhou'};
+const statusLabels = {fila:'Na fila',processando:'Processando',enviando:'Enviando',confirmando:'Confirmando',pendente:'Pendente',concluido:'ID gerado',interrompido:'Interrompido',erro:'Falhou'};
 const safe = v => String(v ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 let csrf = '';
 let currentSource = 'url';
@@ -124,6 +124,7 @@ function fmtDuration(value){
 }
 function actions(j){
   const arr=[];
+  if(j.error)arr.push(`<button type="button" class="mini-btn" data-action="error" data-id="${safe(j.id)}">Ver motivo</button>`);
   if(j.asset_id)arr.push(`<button type="button" class="mini-btn" data-action="copy" data-id="${safe(j.id)}">Copiar ID</button>`);
   if(j.has_audio)arr.push(`<button type="button" class="mini-btn" data-action="audio" data-id="${safe(j.id)}">Baixar MP3</button>`);
   if(j.operation && ['erro','pendente','interrompido'].includes(j.status))arr.push(`<button type="button" class="mini-btn" data-action="verify" data-id="${safe(j.id)}">Verificar</button>`);
@@ -173,7 +174,11 @@ $('jobsTable').addEventListener('click',async e=>{
   button.disabled=true;
   try{
     const action=button.dataset.action;
-    if(action==='copy'){
+    if(action==='error'){
+      $('errorDialogTitle').textContent='Motivo da falha · '+j.title;
+      $('errorDialogText').textContent=j.error||'Erro não informado.';
+      $('errorDialog').showModal();
+    }else if(action==='copy'){
       await navigator.clipboard.writeText(j.asset_id);
       toast('Asset ID '+j.asset_id+' copiado.');
     }else if(action==='audio'){
@@ -190,6 +195,8 @@ $('jobsTable').addEventListener('click',async e=>{
   }catch(e){toast(e.message,true);}
   finally{button.disabled=false;}
 });
+$('errorDialogClose').addEventListener('click',()=> $('errorDialog').close());
+$('errorDialog').addEventListener('click',e=>{if(e.target===$('errorDialog'))$('errorDialog').close();});
 $('exportBtn').addEventListener('click',()=>{
   if(!jobs.length){toast('Ainda não existem registros para exportar.');return;}
   const cols=['title','creator_type','creator_id','status','asset_id','operation','created_at','source_type','original_duration','final_duration','error'];
@@ -217,3 +224,14 @@ async function init(){
   },4000);
 }
 init();
+
+// Diagnóstico autenticado das ferramentas instaladas no backend.
+$('diagnosticsBtn').addEventListener('click', async()=>{
+  try{
+    const d = await api('/api/system/diagnostics');
+    $('errorDialogTitle').textContent = 'Diagnóstico do servidor Naples Studios';
+    $('errorDialogText').textContent =
+      `FFmpeg: ${d.ffmpeg}\nFFprobe: ${d.ffprobe}\nyt-dlp: ${d['yt-dlp']}\nNode: ${d.node}\n\n${d.nota}`;
+    $('errorDialog').showModal();
+  }catch(err){toast(err.message, true);}
+});
