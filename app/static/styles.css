@@ -78,3 +78,10 @@
 
 .naples-group-option{display:flex;gap:10px;align-items:center;color:#b5e3c4;font-size:13px}
 .naples-group-option input{width:17px;flex:none;accent-color:#72f3a2}
+
+/* Naples v12: erro de acesso à fonte tratado na própria tela, sem sucesso falso. */
+.naples-provider-help{margin-top:14px;padding:15px;border:1px solid #77683b;background:#242419;color:#f2e4bb;border-radius:12px;display:flex;align-items:center;justify-content:space-between;gap:13px;flex-wrap:wrap;}
+.naples-provider-help[hidden]{display:none!important;}
+.naples-provider-help strong{display:block;font-size:13px;margin-bottom:5px;}
+.naples-provider-help p{font-size:12px;line-height:1.5;color:#e4d2a4;max-width:650px;overflow-wrap:anywhere;}
+.naples-provider-help button{white-space:nowrap;}

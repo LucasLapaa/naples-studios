@@ -12,6 +12,20 @@ let jobs = [];
 let lastJobIds = new Set();
 let toastTimer;
 let previewObjectUrl = null;
+function hideProviderHelp(){
+  $('providerAccessHelp').hidden=true;
+  $('providerAccessDetails').textContent='';
+}
+function showProviderHelp(message){
+  // Exibir o impedimento real sem uma notificação de erro intrusiva.
+  // Nunca informar que o upload ocorreu se a fonte não forneceu o áudio.
+  $('providerAccessDetails').textContent=String(message||'A plataforma não entregou o arquivo.');
+  $('providerAccessHelp').hidden=false;
+}
+$('providerLocalFallback').addEventListener('click',()=>{
+  switchSource('file');
+  $('audioFile').click();
+});
 function clearMediaPreview(){
   $('previewCard').hidden=true;
   $('previewPlayer').pause();
@@ -78,6 +92,7 @@ function showApp(profile, config){
 function switchSource(type){
   currentSource=type;
   clearMediaPreview();
+  hideProviderHelp();
   $('urlSource').hidden=type!=='url';
   $('fileSource').hidden=type!=='file';
   document.querySelectorAll('.source-option').forEach(btn=>btn.classList.toggle('active',btn.dataset.source===type));
@@ -95,7 +110,7 @@ $('audioFile').addEventListener('change',()=>{
     showMediaPreview(file.name, `Arquivo local · ${(file.size/1048576).toFixed(2)} MB · áudio pode ser reproduzido abaixo`);
   }
 });
-$('sourceUrl').addEventListener('input',clearMediaPreview);
+$('sourceUrl').addEventListener('input',()=>{clearMediaPreview();hideProviderHelp();});
 $('previewBtn').addEventListener('click',async()=>{
   const url=$('sourceUrl').value.trim();
   if(!url){toast('Cole um link antes de solicitar a prévia.',true);return;}
@@ -106,7 +121,11 @@ $('previewBtn').addEventListener('click',async()=>{
     const length=meta.duration?` · ${fmtDuration(meta.duration)}`:'';
     showMediaPreview(meta.title,`${meta.platform}${length}${meta.uploader?' · '+meta.uploader:''}`);
     if(!$('title').value.trim()) $('title').value=meta.title.slice(0,80);
-  }catch(e){toast(e.message,true);}
+  }catch(e){
+    if (/\[(YOUTUBE_VERIFICATION|PROVIDER_VERIFICATION|SOURCE_RESTRICTED|SOURCE_FORBIDDEN|SOURCE_RATE_LIMIT)\]/.test(e.message)){
+      showProviderHelp(e.message.replace(/^\[[A-Z_]+\]\s*/,''));
+    }else{toast(e.message,true);}
+  }
   finally{btn.disabled=false;btn.textContent='♫ Ver prévia do link';}
 });
 const drop=$('dropZone');
