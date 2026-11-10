@@ -21,6 +21,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import config, database as db, settings_store as store
 from .asset_monitor import inspect_asset
+from .roblox_key import inspect_key, KeyInspectionError, allowed_destination
 from .core import (
     MAX_FILE_BYTES, ProcessingError, PlatformAccessError, convert_2_5x, create_roblox_asset,
     download_platform, platform_from_url, preview_platform, poll_roblox_asset, valid_creator_id, valid_title
@@ -288,6 +289,25 @@ def admin_settings(request: Request):
             'callback_url': config.APP_BASE_URL + '/auth/discord/callback'}
 
 
+@app.post('/api/admin/roblox-key/inspect')
+async def inspect_roblox_key(request: Request):
+    """Validação da API Key sem expô-la em URLs, resposta, logs ou frontend.
+    Requer sessão do administrador e CSRF. Não salva a chave automaticamente.
+    """
+    current_admin(request, mutate=True)
+    rate('key-inspect:' + (request.client.host if request.client else 'unknown'), 8, 600)
+    data = await request.json()
+    if not isinstance(data, dict):
+        raise HTTPException(400, 'Informe uma chave Roblox válida.')
+    key = data.get('api_key')
+    if not key:
+        key = config.ROBLOX_API_KEY  # revalidar chave já salva sem revelá-la
+    try:
+        return await asyncio.to_thread(inspect_key, key)
+    except KeyInspectionError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
 @app.put('/api/admin/settings')
 async def save_admin_settings(request: Request):
     current_admin(request, mutate=True)
@@ -317,6 +337,33 @@ async def save_admin_settings(request: Request):
         raise HTTPException(400, 'Preencha o Client Secret do Discord (mínimo 8 caracteres).')
     if not values.get('roblox_api_key') or len(values.get('roblox_api_key')) < 16:
         raise HTTPException(400, 'Preencha uma API Key Roblox válida (mínimo 16 caracteres).')
+    # Quando uma nova chave é informada, consulta a API oficial de introspecção
+    # para descobrir a identidade autorizada sem exigir ID no formulário de upload.
+    # Seleção de grupo ocorre SOMENTE aqui quando não houver grupo único.
+    if data.get('roblox_api_key'):
+        try:
+            key_info = await asyncio.to_thread(inspect_key, values['roblox_api_key'])
+        except KeyInspectionError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        if values['roblox_creator_type'] == 'user':
+            suggested = key_info['default_creator_id'] if key_info['default_creator_type']=='user' else key_info.get('authorized_user_id')
+            if suggested and allowed_destination(key_info, 'user', suggested):
+                values['roblox_creator_id'] = suggested
+        elif values['roblox_creator_type']=='group':
+            # Grupo precisa ser escolhido explicitamente se a chave autoriza muitos.
+            group_id = values.get('roblox_creator_id', '')
+            if not group_id or (key_info.get('authorized_user_id') and group_id==key_info['authorized_user_id']):
+                group_id = key_info.get('suggested_group_id') or ''
+            if not group_id:
+                raise HTTPException(400, 'A chave não identifica um único grupo. Informe o ID do grupo apenas em Roblox Key.')
+            values['roblox_creator_id'] = group_id
+        if not allowed_destination(key_info, values['roblox_creator_type'], values.get('roblox_creator_id','')):
+            raise HTTPException(400, 'O destino selecionado não possui Assets > Write nesta chave.')
+        # antiga lista opcional pode bloquear involuntariamente o destino da chave nova
+        if values.get('roblox_allowed_creator_ids'):
+            ids=[x.strip() for x in values['roblox_allowed_creator_ids'].split(',')]
+            if values['roblox_creator_id'] not in ids:
+                values['roblox_allowed_creator_ids']=values['roblox_creator_id']
     try:
         values['app_base_url'] = config.validate_settings(values)
     except ValueError as exc:
@@ -324,7 +371,7 @@ async def save_admin_settings(request: Request):
     # Segredos jamais aparecem nas respostas JSON/logs de aplicação.
     store.set_values({k: v for k, v in values.items() if k in permitted})
     config.reload_settings()
-    return {'ok': True, 'ready': config.ready(), 'callback_url': config.APP_BASE_URL + '/auth/discord/callback'}
+    return {'ok': True, 'ready': config.ready(), 'creator_id': config.ROBLOX_CREATOR_ID, 'creator_type': config.ROBLOX_CREATOR_TYPE, 'callback_url': config.APP_BASE_URL + '/auth/discord/callback'}
 
 
 @app.post('/api/admin/change-password')
@@ -441,7 +488,7 @@ def session(request: Request):
         'config': {
             'platform_links': config.ENABLE_PLATFORM_LINKS, 'speed': 2.5,
             'creator_id': config.ROBLOX_CREATOR_ID, 'creator_type': config.ROBLOX_CREATOR_TYPE,
-            'version': '7.0', 'allowed_creator_ids': sorted(config.ROBLOX_ALLOWED_CREATOR_IDS)
+            'version': '9.0', 'allowed_creator_ids': sorted(config.ROBLOX_ALLOWED_CREATOR_IDS)
         }
     }
 
@@ -520,8 +567,8 @@ async def submit_job(request: Request, title: str = Form(...), creator_id: str =
     rate('publish:' + user['discord_id'], 80, 3600)
     try:
         title = valid_title(title)
-        creator_id = valid_creator_id(creator_id or config.ROBLOX_CREATOR_ID)
-        creator_type = creator_type or config.ROBLOX_CREATOR_TYPE
+        creator_id = valid_creator_id(config.ROBLOX_CREATOR_ID)
+        creator_type = config.ROBLOX_CREATOR_TYPE
         if creator_type not in ('user', 'group'):
             raise ProcessingError('Escolha usuário ou grupo Roblox.')
         if config.ROBLOX_ALLOWED_CREATOR_IDS and creator_id not in config.ROBLOX_ALLOWED_CREATOR_IDS:
@@ -590,8 +637,8 @@ async def submit_link_batch(request: Request):
         data = await request.json()
         if not isinstance(data, dict) or data.get('rights_confirmed') is not True:
             raise ProcessingError('Confirme os direitos de uso de todas as músicas do lote.')
-        cid = valid_creator_id(data.get('creator_id') or config.ROBLOX_CREATOR_ID)
-        ctype = data.get('creator_type') or config.ROBLOX_CREATOR_TYPE
+        cid = valid_creator_id(config.ROBLOX_CREATOR_ID)
+        ctype = config.ROBLOX_CREATOR_TYPE
         if ctype not in ('user','group'):
             raise ProcessingError('Destino Roblox inválido.')
         if config.ROBLOX_ALLOWED_CREATOR_IDS and cid not in config.ROBLOX_ALLOWED_CREATOR_IDS:

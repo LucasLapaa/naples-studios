@@ -154,6 +154,45 @@ def download_platform(url: str, workdir: Path) -> Path:
         raise PlatformAccessError('O arquivo da plataforma supera 50 MB. Envie um arquivo menor.')
     return source
 
+def preview_platform(url: str) -> dict:
+    """Busca apenas metadados de uma faixa pública. Não baixa áudio.
+
+    Não usa cookies nem contorna exigência de login/verificação da origem.
+    """
+    platform = platform_from_url(url)
+    command = [
+        'yt-dlp', '--ignore-config', '--no-playlist',
+        '--skip-download', '--dump-single-json', '--no-warnings',
+        '--js-runtimes', 'node', '--socket-timeout', '12',
+        '--retries', '1', '--no-write-info-json', '--', url,
+    ]
+    try:
+        raw = run(command, 45)
+        if len(raw) > 2_000_000:
+            raise ProcessingError('Metadados maiores do que o esperado.')
+        payload = json.loads(raw)
+        if not isinstance(payload, dict) or payload.get('_type') in ('playlist', 'multi_video'):
+            raise ProcessingError('Envie um link de uma única música, não uma playlist.')
+        title = str(payload.get('title') or '').strip()[:120]
+        if not title:
+            title = 'Música sem título informado'
+        duration = payload.get('duration')
+        duration = round(float(duration), 1) if isinstance(duration, (int, float)) and 0 < duration < 100000 else None
+        return {
+            'platform': platform, 'title': title,
+            'duration': duration,
+            'uploader': str(payload.get('uploader') or '')[:100],
+            'note': 'Prévia informativa. O download depende da autorização e da disponibilidade na plataforma.'
+        }
+    except (ProcessingError, ValueError, TypeError, json.JSONDecodeError) as exc:
+        if isinstance(exc, ProcessingError) and str(exc).startswith('Ferramenta yt-dlp não instalada'):
+            raise PlatformAccessError('O yt-dlp não está instalado no servidor.') from exc
+        code = source_error_code(platform, str(exc))
+        log.warning('Falha de prévia | plataforma=%s | codigo=%s | erro=%s',
+                    platform, code, safe_debug(str(exc)))
+        raise PlatformAccessError(f'[{code}] {source_failure_message(platform, code)}', code=code) from exc
+
+
 def duration_seconds(path: Path) -> float:
     out = run([
         'ffprobe', '-v', 'error', '-show_entries', 'format=duration',
