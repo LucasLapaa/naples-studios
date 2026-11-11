@@ -19,7 +19,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, Response, Uploa
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import config, database as db, settings_store as store, provider_guard
+from . import config, database as db, settings_store as store, provider_guard, billing
 from .asset_monitor import inspect_asset
 from .audio_audit import audit_audio, AudioAuditError
 from .roblox_key import inspect_key, KeyInspectionError, allowed_destination
@@ -128,6 +128,7 @@ async def run_job(*args):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.initialize()
+    billing.init_db()
     store.initialize()
     config.reload_settings()
     # Sessões seguras funcionam mesmo sem conta administrativa/Roblox cadastrada.
@@ -588,14 +589,88 @@ def disconnect_roblox(request: Request):
     store.delete_discord_roblox_key(user['discord_id'])
     return {'configured':False, 'message':'Chave pessoal desconectada.'}
 
+# ---------------------------------------------------------------------------
+# Pix mensal - checkout liberado após login Discord, mas sem assinatura.
+# A verificação final ocorre sempre na API do Mercado Pago.
+# ---------------------------------------------------------------------------
+
+@app.get('/api/billing/status')
+def billing_status(request: Request):
+    user = require_session(request)
+    return {'subscription': billing.access_info(user['discord_id']),
+            'payment': billing._order_response(billing.current_order(user['discord_id']))}
+
+
+@app.post('/api/billing/pix')
+async def billing_new_pix(request: Request):
+    user = require_session(request, mutate=True)
+    rate('billing-create:' + user['discord_id'], 8, 600)
+    data = await request.json()
+    if not isinstance(data, dict):
+        raise HTTPException(400, 'Dados inválidos.')
+    try:
+        payment = await asyncio.to_thread(billing.start_pix, user['discord_id'],
+                                          data.get('email',''), data.get('cpf',''))
+    except billing.BillingError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {'payment': payment, 'subscription': billing.access_info(user['discord_id'])}
+
+
+@app.post('/api/billing/check')
+async def billing_check(request: Request):
+    user = require_session(request, mutate=True)
+    rate('billing-check:' + user['discord_id'], 24, 600)
+    try:
+        status = await asyncio.to_thread(billing.check_latest, user['discord_id'])
+    except billing.BillingError as exc:
+        raise HTTPException(503, str(exc)) from exc
+    return {'subscription': status, 'payment': billing._order_response(billing.current_order(user['discord_id']))}
+
+
+@app.post('/api/billing/webhook')
+async def billing_webhook(request: Request):
+    secret = os.getenv('MP_WEBHOOK_SECRET', '').strip()
+    if not secret or not billing.enabled():
+        raise HTTPException(503, 'Webhook ainda não configurado.')
+    if int(request.headers.get('content-length') or 0) > 16384:
+        raise HTTPException(413, 'Notificação muito grande.')
+    body = await request.body()
+    if len(body) > 16384:
+        raise HTTPException(413, 'Notificação muito grande.')
+    try:
+        payload = __import__('json').loads(body)
+    except ValueError:
+        raise HTTPException(400, 'JSON inválido.')
+    if not isinstance(payload, dict):
+        raise HTTPException(400, 'JSON inválido.')
+    params = request.query_params
+    param_id = params.get('data.id','')
+    body_id = str((payload.get('data') or {}).get('id') or '')
+    data_id = param_id or body_id
+    if param_id and body_id and param_id != body_id:
+        raise HTTPException(401, 'Identificador divergente.')
+    if not billing.verify_webhook(request.headers.get('x-signature',''),
+                                  request.headers.get('x-request-id',''), data_id, secret):
+        raise HTTPException(401, 'Assinatura de webhook inválida.')
+    if payload.get('type') == 'payment' or str(payload.get('action','')).startswith('payment.'):
+        try:
+            await asyncio.to_thread(billing.reconcile, data_id)
+        except billing.BillingError:
+            # Mercado Pago deve reenviar quando sua API estiver indisponível.
+            raise HTTPException(503, 'Falha temporária na consulta do pagamento.')
+    return {'ok': True}
+
+
 @app.get('/api/session')
 def session(request: Request):
     user = require_session(request)
+    subscription = billing.access_info(user['discord_id'])
     roblox = current_roblox_credential(user['discord_id'])
     # CSRF: valor derivado? Guardamos apenas hash; geramos um segundo token de sessão de acesso
     # usando HMAC estável a partir de token de cookie e um segredo de aplicação no servidor.
     return {
         'authenticated': True,
+        'billing': subscription,
         'user': {'id': user['discord_id'], 'username': user['username'], 'avatar_url': user['avatar_url']},
         'csrf': derive_csrf(request.cookies[config.SESSION_COOKIE]),
         'config': {
@@ -614,12 +689,15 @@ def derive_csrf(session_token: str):
 
 
 def authorize_request(request: Request, mutate=False):
-    return require_session(request, mutate=mutate)
+    user = require_session(request, mutate=mutate)
+    if not billing.access_info(user['discord_id'])['active']:
+        raise HTTPException(402, 'Assinatura vencida. Renove seu acesso por Pix para continuar.')
+    return user
 
 
 @app.post('/api/logout')
 def logout(request: Request):
-    authorize_request(request, mutate=True)
+    require_session(request, mutate=True)
     with db.connect() as conn:
         conn.execute('DELETE FROM sessions WHERE token_hash=?', (hashed(request.cookies[config.SESSION_COOKIE]),))
     resp = JSONResponse({'ok': True})
