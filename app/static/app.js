@@ -90,17 +90,21 @@ async function api(path, options={}){
 }
 function showLogin(){
   $('appView').hidden=true;
+  $('billingView').hidden=true;
   $('loginView').hidden=false;
   const msg=new URLSearchParams(location.search).get('login_error');
   const texts={cancelado:'Login cancelado. Autorize o acesso no Discord para continuar.',discord:'Falha ao validar a autenticação no Discord. Tente novamente.',acesso:'Acesso não permitido. Sua conta pode estar suspensa ou o cadastro público foi desativado.',config:'O Discord OAuth2 ainda não foi configurado no servidor. O proprietário precisa cadastrar a aplicação uma única vez.'};
   $('loginError').textContent=texts[msg]||'';
   $('loginError').hidden=!texts[msg];
 }
-function showApp(profile, config){
+function showApp(profile, config, subscription){
   authorized=true;
   $('loginView').hidden=true;
+  $('billingView').hidden=true;
   $('appView').hidden=false;
   $('userName').textContent=profile.username;
+  const planText=subscription?.lifetime?'Acesso vitalício':subscription?.enabled && subscription?.expires_at?`Plano até ${new Date(subscription.expires_at*1000).toLocaleDateString('pt-BR')}`:'Discord conectado';
+  $('planLabel').textContent=planText;
   const avatar=$('userAvatar'); avatar.replaceChildren();
   if(profile.avatar_url && /^https:\/\/cdn\.discordapp\.com\/avatars\/\d+\/[\w]+\.png\?size=128$/.test(profile.avatar_url)){
     const image=document.createElement('img');image.src=profile.avatar_url;image.alt='Avatar de '+profile.username;
@@ -320,7 +324,12 @@ async function init(){
   try{
     const result=await api('/api/session');
     csrf=result.csrf;
-    showApp(result.user,result.config);
+    if(result.billing?.enabled && !result.billing.active){
+      authorized=true;
+      window.NaplesBilling.show(result.billing,csrf);
+      return;
+    }
+    showApp(result.user,result.config,result.billing);
     await fetchJobs();
     await Promise.all([fetchCollections(),loadConnection()]);
     if(!result.config.roblox_connected && !sessionStorage.getItem('naples-key-tip')){sessionStorage.setItem('naples-key-tip','1');location.hash='#roblox-key';toast('Bem-vindo! Conecte sua Roblox Key para começar a publicar.');}
