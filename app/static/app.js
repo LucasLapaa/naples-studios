@@ -12,6 +12,35 @@ let jobs = [];
 let lastJobIds = new Set();
 let toastTimer;
 let previewObjectUrl = null;
+const providerFixes = {
+  SOURCE_RATE_LIMIT: 'O YouTube ou SoundCloud recusou a conexão por HTTP 429. A v21 não impõe pausa local; repetir imediatamente pode falhar novamente. Aguarde a origem liberar o acesso ou envie um arquivo autorizado.',
+  YOUTUBE_VERIFICATION: 'O YouTube exigiu autenticação/verificação. OAuth2 Google permite consultar o canal, mas não autentica o yt-dlp para baixar qualquer música. Use uma fonte autorizada de áudio.',
+  SOURCE_RESTRICTED: 'O vídeo exige permissão, idade ou login. Verifique o acesso ao conteúdo na origem e obtenha o arquivo por um canal autorizado.',
+  SOURCE_FORBIDDEN: 'A plataforma recusou o acesso (401/403). Confirme se o conteúdo pode ser disponibilizado para download.',
+  SOURCE_NOT_FOUND: 'O endereço foi removido ou está indisponível. Confira o link do vídeo individual.',
+  SOURCE_FORMAT_UNAVAILABLE: 'A fonte não disponibilizou um formato utilizável. Um arquivo MP3/OGG original autorizado é a alternativa.',
+  SOURCE_NETWORK: 'Houve uma falha de rede. Consulte o diagnóstico do Railway antes de tentar novamente.',
+  SOURCE_COOLDOWN: 'Existe uma pausa configurada para a origem. A pausa YouTube da v21 vem desligada por padrão.'
+};
+function explainJobFailure(j){
+  if (!j.source_error_code) return j.error || 'Falha não identificada.';
+  return [j.error || 'A origem recusou a importação.', providerFixes[j.source_error_code] || 'Confira o link e as permissões da fonte.'].join('\n\nComo resolver: ');
+}
+function updateSourceHint(){
+  const node=$('urlHint');
+  if (!node || document.querySelector('[data-source="url"]').disabled) return;
+  const raw=$('sourceUrl').value.trim();
+  let host='';
+  try{const u=new URL(raw);if(u.protocol==='https:') host=u.hostname.toLowerCase();}catch{}
+  if(host==='youtu.be'||host==='www.youtu.be'||host==='youtube.com'||host==='www.youtube.com'||host==='music.youtube.com'||host==='m.youtube.com'){
+    node.textContent='YouTube: use o link de um vídeo individual. A prévia mostra metadados, mas NÃO garante download; HTTP 429 e LOGIN_REQUIRED dependem da própria origem.';
+  }else if(host==='soundcloud.com'||host==='www.soundcloud.com'||host==='on.soundcloud.com'){
+    node.textContent='SoundCloud: o download depende da disponibilidade da faixa e das permissões do artista. Esta fila funciona separadamente do YouTube.';
+  }else{
+    node.textContent='Use um vídeo individual do YouTube, uma faixa SoundCloud ou um link direto autorizado de áudio em R2, S3, GCS, Azure Blob ou Spaces.';
+  }
+}
+
 function hideProviderHelp(){
   $('providerAccessHelp').hidden=true;
   $('providerAccessDetails').textContent='';
@@ -110,7 +139,7 @@ $('audioFile').addEventListener('change',()=>{
     showMediaPreview(file.name, `Arquivo local · ${(file.size/1048576).toFixed(2)} MB · áudio pode ser reproduzido abaixo`);
   }
 });
-$('sourceUrl').addEventListener('input',()=>{clearMediaPreview();hideProviderHelp();});
+$('sourceUrl').addEventListener('input',()=>{clearMediaPreview();hideProviderHelp();updateSourceHint();});
 $('previewBtn').addEventListener('click',async()=>{
   const url=$('sourceUrl').value.trim();
   if(!url){toast('Cole um link antes de solicitar a prévia.',true);return;}
@@ -120,7 +149,10 @@ $('previewBtn').addEventListener('click',async()=>{
     const meta=await api('/api/media/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url})});
     const length=meta.duration?` · ${fmtDuration(meta.duration)}`:'';
     showMediaPreview(meta.title,`${meta.platform}${length}${meta.uploader?' · '+meta.uploader:''}${meta.note?' · '+meta.note:''}`);
-    if(!$('title').value.trim()) $('title').value=meta.title.slice(0,80);
+    // Nunca preencher o título do Asset com "Prévia indisponível".
+    if(meta.preview_status==='rate_limited') showProviderHelp('A consulta pública de metadados recebeu HTTP 429. Não há bloqueio interno do Naples; o YouTube/SoundCloud recusou a consulta.');
+    if(meta.preview_status==='metadata_only' && !$('title').value.trim()) $('title').value=meta.title.slice(0,80);
+    if(meta.preview_status==='unavailable') toast('Prévia indisponível. Você ainda pode informar o título manualmente; download não está garantido.',true);
   }catch(e){
     if (/\[(YOUTUBE_VERIFICATION|PROVIDER_VERIFICATION|SOURCE_RESTRICTED|SOURCE_FORBIDDEN|SOURCE_RATE_LIMIT|SOURCE_COOLDOWN)\]/.test(e.message)){
       showProviderHelp(e.message.replace(/^\[[A-Z_]+\]\s*/,''));
@@ -236,7 +268,7 @@ $('jobsTable').addEventListener('click',async e=>{
     const action=button.dataset.action;
     if(action==='error'){
       $('errorDialogTitle').textContent='Motivo da falha · '+j.title;
-      $('errorDialogText').textContent=j.error||'Erro não informado.';
+      $('errorDialogText').textContent=explainJobFailure(j);
       $('errorDialog').showModal();
     }else if(action==='copy'){
       await navigator.clipboard.writeText(j.asset_id);
@@ -305,7 +337,7 @@ $('diagnosticsBtn').addEventListener('click', async()=>{
     const d = await api('/api/system/diagnostics?network=1');
     $('errorDialogTitle').textContent = 'Diagnóstico do servidor Naples Studios';
     $('errorDialogText').textContent =
-      `Domínio do painel: ${d.public_origin}\nIP de saída Railway: ${d.outbound_ip}\nCommit: ${d.railway_commit}\nDeploy: ${d.railway_deployment}\nYouTube: ${d.youtube_guard?.cooldown_seconds ? `em pausa (${d.youtube_guard.cooldown_seconds}s; ${d.youtube_guard.reason})` : "sem pausa registrada"}\nSoundCloud: ${d.soundcloud_guard?.cooldown_seconds ? `em pausa (${d.soundcloud_guard.cooldown_seconds}s; ${d.soundcloud_guard.reason})` : "sem pausa registrada"}\n\nFFmpeg: ${d.ffmpeg}\nFFprobe: ${d.ffprobe}\nyt-dlp: ${d['yt-dlp']}\nNode: ${d.node}\nEJS: ${d['yt-dlp-ejs']}\n\n${d.contexto}\n${d.nota}`;
+      `Domínio do painel: ${d.public_origin}\nIP de saída Railway: ${d.outbound_ip}\nCommit: ${d.railway_commit}\nDeploy: ${d.railway_deployment}\nYouTube: ${d.youtube_guard?.cooldown_seconds ? `pausa interna ativa (${d.youtube_guard.cooldown_seconds}s; ${d.youtube_guard.reason})` : "sem pausa interna (bloqueios externos continuam possíveis)"}\nSoundCloud: ${d.soundcloud_guard?.cooldown_seconds ? `em pausa (${d.soundcloud_guard.cooldown_seconds}s; ${d.soundcloud_guard.reason})` : "sem pausa registrada"}\n\nFFmpeg: ${d.ffmpeg}\nFFprobe: ${d.ffprobe}\nyt-dlp: ${d['yt-dlp']}\nNode: ${d.node}\nEJS: ${d['yt-dlp-ejs']}\n\n${d.contexto}\n${d.nota}`;
     $('errorDialog').showModal();
   }catch(err){toast(err.message, true);}
 });
