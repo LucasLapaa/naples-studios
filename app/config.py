@@ -41,7 +41,10 @@ def reload_settings():
     global APP_BASE_URL, DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DISCORD_ALLOWED_USER_IDS, DISCORD_PUBLIC_REGISTRATION
     global ROBLOX_API_KEY, ROBLOX_CREATOR_ID, ROBLOX_CREATOR_TYPE, ROBLOX_ALLOWED_CREATOR_IDS
     global ENABLE_PLATFORM_LINKS, COOKIE_SECURE, SESSION_SECRET
-    APP_BASE_URL = str(get('app_base_url', 'APP_BASE_URL', 'http://127.0.0.1:8000')).rstrip('/')
+    # Dominio publico definido pelo operador no Railway deve prevalecer sobre
+    # a URL antiga salva no banco (por exemplo, apos migrar da Vercel para www).
+    env_base_url = os.getenv('APP_BASE_URL', '').strip()
+    APP_BASE_URL = str(env_base_url or get('app_base_url', default='http://127.0.0.1:8000')).rstrip('/')
     DISCORD_CLIENT_ID = str(get('discord_client_id', 'DISCORD_CLIENT_ID'))
     DISCORD_CLIENT_SECRET = str(get('discord_client_secret', 'DISCORD_CLIENT_SECRET'))
     DISCORD_ALLOWED_USER_IDS = {x.strip() for x in str(get('discord_allowed_user_ids', 'DISCORD_ALLOWED_USER_IDS')).split(',') if x.strip()}
@@ -53,7 +56,9 @@ def reload_settings():
     ROBLOX_ALLOWED_CREATOR_IDS = {x.strip() for x in str(get('roblox_allowed_creator_ids', 'ROBLOX_ALLOWED_CREATOR_IDS')).split(',') if x.strip()}
     raw_links = get('enable_platform_links', 'ENABLE_PLATFORM_LINKS', '1')
     ENABLE_PLATFORM_LINKS = raw_links is True or str(raw_links).lower() in ('1','true','on')
-    raw_secure = get('cookie_secure', 'COOKIE_SECURE', '0')
+    # Mesma regra para cookies ao mudar para HTTPS em producao.
+    env_secure = os.getenv('COOKIE_SECURE', '').strip()
+    raw_secure = env_secure if env_secure else get('cookie_secure', default='0')
     COOKIE_SECURE = raw_secure is True or str(raw_secure).lower() in ('1','true','on')
     SESSION_SECRET = str(get('session_secret', 'SESSION_SECRET'))
 
