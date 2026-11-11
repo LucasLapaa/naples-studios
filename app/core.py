@@ -318,7 +318,7 @@ def duration_seconds(path: Path) -> float:
     return duration
 
 def convert_2_5x(source: Path, output: Path) -> dict:
-    """Acelera áudio em 2.5x COM pitch, aplica EQ e limpa metadados.
+    """Prepara áudio autorizado: 2.5x COM pitch, EQ, volume e validação técnica.
 
     MP3: saída padrão utilizada pelo painel Naples Studios.
     OGG: suportado para processamento manual ou futuras versões do painel.
@@ -351,13 +351,25 @@ def convert_2_5x(source: Path, output: Path) -> dict:
     # 2. asetrate reinterpreta as amostras como 110250 Hz (= 44100 x 2.5),
     #    acelerando tempo e pitch juntos — sem o filtro atempo.
     # 3. Reamostra para 44100 Hz para gerar um arquivo normalizado.
-    # 4. Aplica EQ sobre o ÁUDIO FINAL (Hz após a mudança de pitch).
+    # 4. Aplica EQ sobre o áudio já acelerado (Hz após a mudança de pitch).
+    # 5. Normaliza loudness e limita picos reais para reduzir distorção de saída.
+    #    loudnorm em passagem única opera de modo dinâmico: melhora a padronização,
+    #    mas não repara distorções presentes na fonte e não altera a moderação Roblox.
+    # 6. Atenua a saída em 50% (equivalente a aproximadamente -6,02 dB),
+    #    para compensar o Sound.Volume=2 no Roblox. Não usar volume=0:
+    #    silêncio digital multiplicado por 2 continua sendo silêncio.
+    #    IMPORTANTE: ganho deve ser aplicado APÓS loudnorm; caso contrário,
+    #    loudnorm elevaria o nível novamente e anularia a atenuação.
+    # 7. loudnorm pode usar oversampling; voltamos explicitamente a 44,1 kHz.
     audio_filters = (
         'aresample=44100,'
         'asetrate=110250,'
         'aresample=44100,'
         'highpass=f=100,'
-        'lowpass=f=15000'
+        'lowpass=f=15000,'
+        'loudnorm=I=-16:TP=-2:LRA=11,'
+        'volume=0.5,'
+        'aresample=44100'
     )
 
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -381,6 +393,7 @@ def convert_2_5x(source: Path, output: Path) -> dict:
         if final_duration >= MAX_DURATION:
             raise ProcessingError('Áudio final precisa ter menos de 7 minutos.')
         inspect_output_audio(output)
+        validate_audio_decode(output)
 
         return {
             'original_duration': round(original_duration, 1),
@@ -413,6 +426,25 @@ def inspect_output_audio(path: Path) -> dict:
     return {'codec': codec, 'sample_rate': sr, 'channels': channels}
 
 
+def validate_audio_decode(path: Path) -> None:
+    """Decodifica a saída inteira para detectar arquivos corrompidos ou incompletos.
+
+    Sem áudio exportado para stdout; o FFmpeg apenas verifica os frames.
+    Erros interrompem o envio antes de chamar a API do Roblox.
+    """
+    try:
+        process = subprocess.run([
+            'ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'error',
+            '-xerror', '-i', str(path), '-map', '0:a:0', '-f', 'null', '-'
+        ], capture_output=True, text=True, timeout=90, check=False)
+    except FileNotFoundError as exc:
+        raise ProcessingError('FFmpeg indisponível para validar o áudio final.') from exc
+    except subprocess.TimeoutExpired as exc:
+        raise ProcessingError('Verificação de integridade do áudio excedeu o tempo limite.') from exc
+    if process.returncode != 0:
+        raise ProcessingError('Arquivo final não passou na verificação de integridade; upload cancelado.')
+
+
 def ensure_http_ok(response):
     if response.status_code >= 400:
         try:
@@ -435,7 +467,8 @@ def create_roblox_asset(mp3: Path, title: str, creator_id: str, creator_type: st
     payload = {
         'assetType': 'Audio',
         'displayName': title,
-        'description': 'Áudio enviado pelo RBX WAVE. Uso autorizado pelo titular.',
+        # Roblox exige o campo description; string vazia evita texto automático.
+        'description': '',
         'creationContext': {'creator': {key: creator_id}}
     }
     owns_client = client is None
