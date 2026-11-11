@@ -10,6 +10,7 @@ from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 
 import httpx
+from . import provider_guard
 
 CREATE_URL = 'https://apis.roblox.com/assets/v1/assets'
 OPERATIONS_URL = 'https://apis.roblox.com/assets/v1/operations/'
@@ -30,6 +31,9 @@ class PlatformAccessError(ProcessingError):
 
 def source_error_code(platform: str, message: str) -> str:
     msg = (message or '').casefold()
+    # HTTP 429 tem prioridade mesmo quando a resposta também menciona login.
+    if any(x in msg for x in ('http error 429', 'too many requests', 'rate limit')):
+        return 'SOURCE_RATE_LIMIT'
     if any(x in msg for x in ('not a bot', 'confirm you', 'captcha', 'unusual traffic')):
         return 'YOUTUBE_VERIFICATION' if platform == 'YouTube' else 'PROVIDER_VERIFICATION'
     if any(x in msg for x in ('unable to extract client id', 'could not extract client id', 'client_id')):
@@ -38,8 +42,6 @@ def source_error_code(platform: str, message: str) -> str:
         return 'PROVIDER_VERIFICATION'
     if any(x in msg for x in ('login required', 'requires login', 'private video', 'private track', 'members-only', 'age-restricted')):
         return 'SOURCE_RESTRICTED'
-    if any(x in msg for x in ('http error 429', 'too many requests', 'rate limit')):
-        return 'SOURCE_RATE_LIMIT'
     if any(x in msg for x in ('http error 401', 'http error 403', 'forbidden', 'unauthorized')):
         return 'SOURCE_FORBIDDEN'
     if any(x in msg for x in ('http error 404', 'not found', 'video unavailable', 'track unavailable')):
@@ -57,7 +59,8 @@ def source_failure_message(platform: str, code: str) -> str:
         'SOUNDCLOUD_CLIENT_ID': 'O extrator não conseguiu obter a identificação de acesso do SoundCloud. Isso pode acontecer quando o serviço limita acessos de servidores. Se a faixa for sua, use o arquivo original; para download habilitado, utilize a opção oficial Baixar arquivo no SoundCloud.',
         'PROVIDER_VERIFICATION': f'O {platform} exigiu verificação de acesso que este servidor não consegue concluir. Use um arquivo disponibilizado pelo titular para download.',
         'SOURCE_RESTRICTED': f'O conteúdo do {platform} exige login, autorização ou é privado. O Naples Studios não acessa conteúdos restritos.',
-        'SOURCE_RATE_LIMIT': f'O {platform} limitou temporariamente as solicitações. Evite novas tentativas em sequência; use arquivo autorizado.',
+        'SOURCE_RATE_LIMIT': f'O {platform} limitou temporariamente as solicitações (HTTP 429). O Naples Studios pausará novas tentativas dessa origem; tente mais tarde ou use um arquivo autorizado.',
+        'SOURCE_COOLDOWN': f'O {platform} está em pausa temporária após uma restrição de acesso. Não repetiremos as tentativas até o fim da pausa. Arquivos locais continuam disponíveis.',
         'SOURCE_FORBIDDEN': f'O {platform} negou acesso ao conteúdo (401/403). Verifique as permissões de download da faixa.',
         'SOURCE_NOT_FOUND': f'O endereço do {platform} não está disponível ou foi removido. Confira se é uma faixa individual válida.',
         'SOURCE_FORMAT_UNAVAILABLE': f'O {platform} não disponibilizou formato de áudio utilizável para esse link.',
@@ -199,8 +202,33 @@ def run(cmd, timeout):
         raise ProcessingError(f'Não foi possível processar este áudio. {detail}')
     return r.stdout.strip()
 
+def normalize_youtube_video_url(url: str) -> str:
+    """Retira parâmetros de playlist/rastreamento de links de vídeo individuais.
+
+    Não altera autenticação, IP, cookies ou verificações da plataforma. Se não
+    reconhecer um ID de vídeo válido, devolve a URL recebida sem modificá-la.
+    """
+    if platform_from_url(url) != 'YouTube':
+        return url
+    from urllib.parse import parse_qs, quote
+    p = urlparse(url)
+    host = (p.hostname or '').lower()
+    video_id = None
+    if host in ('youtu.be', 'www.youtu.be'):
+        video_id = p.path.strip('/').split('/')[0]
+    elif p.path == '/watch' and host in ('youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com'):
+        video_id = (parse_qs(p.query).get('v') or [''])[0]
+    elif p.path.startswith('/shorts/') and host in ('youtube.com', 'www.youtube.com'):
+        video_id = p.path.split('/')[2]
+    if video_id and re.fullmatch(r'[a-zA-Z0-9_-]{11}', video_id):
+        return f'https://www.youtube.com/watch?v={video_id}'
+    return url
+
+
 def download_platform(url: str, workdir: Path) -> Path:
     platform = platform_from_url(url)
+    if platform == 'YouTube':
+        url = normalize_youtube_video_url(url)
     if platform == 'Arquivo HTTPS':
         return download_direct_audio(url, workdir)
     workdir.mkdir(parents=True, exist_ok=True)
@@ -215,18 +243,22 @@ def download_platform(url: str, workdir: Path) -> Path:
         '--no-progress', '--js-runtimes', 'node', '--no-write-info-json',
         '--no-write-thumbnail', '--no-part', '--restrict-filenames',
         '--abort-on-unavailable-fragments', '--max-filesize', '50M',
-        '--socket-timeout', '15', '--retries', '2', '--fragment-retries', '2',
+        '--socket-timeout', '15', '--retries', '1', '--fragment-retries', '1',
         '--retry-sleep', 'http:exp=1:8', '--retry-sleep', 'fragment:exp=1:8',
         '--format', 'bestaudio/best', '--output', output_pattern,
         '--', url,
     ]
     try:
-        run(command, 180)
+        with provider_guard.download_slot(platform):
+            run(command, 180)
+    except provider_guard.ProviderPaused as exc:
+        raise PlatformAccessError(f'[SOURCE_COOLDOWN] {source_failure_message(platform, "SOURCE_COOLDOWN")} Tempo restante: {exc.seconds}s.', code='SOURCE_COOLDOWN') from exc
     except ProcessingError as exc:
         # Nunca publica os logs brutos do yt-dlp, URLs privadas ou dados de sessão.
         if str(exc).startswith('Ferramenta yt-dlp não instalada'):
             raise PlatformAccessError('O yt-dlp não está instalado no servidor. Refaça o deploy do Dockerfile.') from exc
         code = source_error_code(platform, str(exc))
+        provider_guard.record_failure(platform, code)
         log.warning('Falha de importação | plataforma=%s | codigo=%s | diagnostico=%s',
                     platform, code, safe_debug(str(exc)))
         raise PlatformAccessError(f'[{code}] {source_failure_message(platform, code)}', code=code) from exc
@@ -247,6 +279,9 @@ def _oembed_preview(url: str, platform: str, client=None) -> dict:
         client = httpx.Client(timeout=httpx.Timeout(9.0, connect=4.0), follow_redirects=False, trust_env=False)
     try:
         response = client.get(endpoint, params={'url': url, 'format': 'json'})
+        if response.status_code == 429:
+            provider_guard.record_failure(platform, 'SOURCE_RATE_LIMIT')
+            raise ValueError('Limite de prévias públicas (HTTP 429)')
         if response.status_code != 200 or len(response.content) > 120_000:
             raise ValueError('Metadados indisponíveis')
         data = response.json()
@@ -264,44 +299,42 @@ def _oembed_preview(url: str, platform: str, client=None) -> dict:
 
 
 def preview_platform(url: str) -> dict:
-    """Prévia rápida por metadados públicos, sem baixar mídia."""
+    """Prévia pública com cache; não força yt-dlp quando o YouTube limita acesso.
+
+    A prévia serve para mostrar metadados e não comprova autorização para baixar.
+    Nenhuma chamada de prévia executa download da mídia.
+    """
     platform = platform_from_url(url)
     if platform == 'Arquivo HTTPS':
-        raw_name = urlparse(url).path.rsplit('/',1)[-1] or 'Áudio hospedado'
+        raw_name = urlparse(url).path.rsplit('/', 1)[-1] or 'Áudio hospedado'
         raw_name = re.sub(r'[^\w .()\-]', '_', raw_name, flags=re.UNICODE).strip()
         return {'platform': platform, 'title': (raw_name or 'Áudio hospedado')[:120],
-                'duration': None, 'uploader':'',
-                'note':'Arquivo direto; o acesso e o codec serão validados no envio.'}
+                'duration': None, 'uploader': '',
+                'note': 'Arquivo direto; acesso e codec serão validados no envio.'}
+    cache_url = normalize_youtube_video_url(url) if platform == 'YouTube' else url
+    from hashlib import sha256
+    # Nunca salva URLs assinadas ou de sessão em cache persistente.
+    cache_key = platform + ':' + sha256(cache_url.encode('utf-8')).hexdigest()
+    result = provider_guard.preview_get(cache_key)
+    if result is not None:
+        return result
     try:
-        return _oembed_preview(url, platform)
-    except (ValueError, httpx.RequestError, json.JSONDecodeError) as exc:
+        provider_guard.assert_available(platform)
+        result = _oembed_preview(cache_url, platform)
+        provider_guard.preview_put(cache_key, result)
+        return result
+    except provider_guard.ProviderPaused as exc:
+        raise PlatformAccessError(
+            f'[SOURCE_COOLDOWN] {source_failure_message(platform, "SOURCE_COOLDOWN")} Tempo restante: {exc.seconds}s.',
+            code='SOURCE_COOLDOWN') from exc
+    except (ValueError, httpx.RequestError, json.JSONDecodeError, httpx.HTTPStatusError) as exc:
+        # Após um oEmbed indisponível, não dispara automaticamente um segundo
+        # extractor yt-dlp para o MESMO link. Evita multiplicar HTTP 429.
         log.info('Prévia pública %s indisponível: %s', platform, type(exc).__name__)
-    # Fallback apenas para metadados, sem baixar áudio.
-    command = [
-        'yt-dlp', '--ignore-config', '--no-playlist',
-        '--skip-download', '--dump-single-json', '--no-warnings',
-        '--js-runtimes', 'node', '--socket-timeout', '8',
-        '--retries', '0', '--no-write-info-json', '--', url,
-    ]
-    try:
-        raw = run(command, 25)
-        if len(raw) > 2_000_000:
-            raise ProcessingError('Metadados maiores do que o esperado.')
-        payload = json.loads(raw)
-        if not isinstance(payload, dict) or payload.get('_type') in ('playlist','multi_video'):
-            raise ProcessingError('Envie um link de uma música, não uma playlist.')
-        title = str(payload.get('title') or '').strip()[:120] or 'Música sem título informado'
-        duration = payload.get('duration')
-        duration = round(float(duration),1) if isinstance(duration,(int,float)) and 0 < duration < 100000 else None
-        return {'platform':platform,'title':title,'duration':duration,
-                'uploader':str(payload.get('uploader') or '')[:100],
-                'note':'Metadados disponíveis. O download pode exigir autorização ou verificação da plataforma.'}
-    except (ProcessingError, ValueError, TypeError, json.JSONDecodeError) as exc:
-        if isinstance(exc, ProcessingError) and str(exc).startswith('Ferramenta yt-dlp não instalada'):
-            raise PlatformAccessError('O yt-dlp não está instalado no servidor.') from exc
-        code = source_error_code(platform, str(exc))
-        log.warning('Falha de prévia | plataforma=%s | codigo=%s | erro=%s', platform, code, safe_debug(str(exc)))
-        raise PlatformAccessError(f'[{code}] {source_failure_message(platform, code)}', code=code) from exc
+        result = {'platform': platform, 'title': 'Prévia indisponível', 'duration': None,
+                  'uploader': '', 'note': 'Não foi possível consultar a prévia pública. Enviar o link não garante acesso ao arquivo.'}
+        provider_guard.preview_put(cache_key, result, ttl_seconds=180)
+        return result
 
 
 def duration_seconds(path: Path) -> float:

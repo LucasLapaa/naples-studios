@@ -19,8 +19,9 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, Response, Uploa
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import config, database as db, settings_store as store
+from . import config, database as db, settings_store as store, provider_guard
 from .asset_monitor import inspect_asset
+from .audio_audit import audit_audio, AudioAuditError
 from .roblox_key import inspect_key, KeyInspectionError, allowed_destination
 from .core import (
     MAX_FILE_BYTES, ProcessingError, PlatformAccessError, convert_2_5x, create_roblox_asset,
@@ -91,9 +92,9 @@ def process_job(job_id: str, local: Path | None, url: str, title: str, creator_i
         if local:
             source = local
         else:
-            db.update_job(job_id, status='processando', stage='Importando link autorizado com yt-dlp')
+            db.update_job(job_id, status='processando', stage='Importando áudio do link autorizado')
             source = download_platform(url, work)
-        db.update_job(job_id, status='processando', stage='FFmpeg: pitch 2.5x, EQ 100 Hz–15 kHz e MP3 sem tags ID3')
+        db.update_job(job_id, status='processando', stage='FFmpeg: pitch 2.5x, EQ 100 Hz–15 kHz, volume normalizado e validação MP3')
         metadata = convert_2_5x(source, EXPORTS / f'{job_id}.mp3')
         db.update_job(job_id, **metadata)
         db.update_job(job_id, status='enviando', stage='Criando asset no Roblox Open Cloud')
@@ -646,7 +647,29 @@ def system_diagnostics(request: Request):
         versions['yt-dlp-ejs'] = 'não instalado (verifique yt-dlp[default])'
     except Exception:
         versions['yt-dlp-ejs'] = 'não foi possível determinar'
-    versions['nota'] = 'Ferramentas instaladas não garantem que sites externos permitirão downloads.'
+    # O domínio público atende ao site/OAuth; a mídia é buscada do IP de saída
+    # do Railway, que não é o mesmo endereço de origem da requisição HTTP.
+    versions['public_origin'] = config.APP_BASE_URL
+    versions['railway_commit'] = os.getenv('RAILWAY_GIT_COMMIT_SHA', '')[:12] or 'não informado'
+    versions['railway_deployment'] = os.getenv('RAILWAY_DEPLOYMENT_ID', '')[:12] or 'não informado'
+    # Consultar endereço de saída APENAS ao clicar em Diagnóstico (network=1).
+    # Nenhuma URL de música, cookie, token ou API Key é enviada nessa chamada.
+    if request.query_params.get('network') == '1':
+        try:
+            with httpx.Client(timeout=httpx.Timeout(4.0, connect=2.5), follow_redirects=False, trust_env=False) as probe:
+                response = probe.get('https://api.ipify.org?format=json')
+                response.raise_for_status()
+                raw_ip = str(response.json().get('ip') or '')
+                ipaddress.ip_address(raw_ip)
+                versions['outbound_ip'] = raw_ip
+        except (httpx.HTTPError, ValueError, TypeError, KeyError):
+            versions['outbound_ip'] = 'consulta indisponível'
+    else:
+        versions['outbound_ip'] = 'não consultado'
+    versions['contexto'] = 'Alterar o domínio do site não altera o destino das chamadas do yt-dlp. Redeploys podem mudar o ambiente/IP de saída do Railway.'
+    versions['youtube_guard'] = provider_guard.status('YouTube')
+    versions['soundcloud_guard'] = provider_guard.status('SoundCloud')
+    versions['nota'] = 'Pausas de origem evitam novas chamadas durante HTTP 429/verificação. Não garantem liberação de download.'
     return versions
 
 
@@ -705,6 +728,12 @@ async def submit_job(request: Request, title: str = Form(...), creator_id: str =
                 raise ProcessingError('Extensão de arquivo não permitida.')
     except ProcessingError as exc:
         raise HTTPException(400, str(exc)) from exc
+
+    if url and platform in ('YouTube', 'SoundCloud'):
+        paused = provider_guard.status(platform)
+        if paused['cooldown_seconds']:
+            raise HTTPException(429, f'{platform} temporariamente em pausa após bloqueio do provedor. Tente mais tarde; arquivo local continua disponível.',
+                                headers={'Retry-After': str(paused['cooldown_seconds'])})
 
     if db.count_active_jobs(user['discord_id']) >= MAX_ACTIVE_JOBS:
         raise HTTPException(429, 'A fila está cheia. Aguarde a conclusão de algumas músicas.')
@@ -832,6 +861,22 @@ async def verify_job(job_id: str, request: Request):
     else:
         db.update_job(job_id, status='pendente', stage='Roblox ainda processando', error=None)
     return {'asset_id': asset_id, 'pending': not bool(asset_id)}
+
+
+@app.get('/api/jobs/{job_id}/audio-audit')
+async def get_audio_audit(job_id: str, request: Request):
+    """Analisa exclusivamente áudio já produzido para o usuário autenticado."""
+    user = authorize_request(request)
+    if not ID_RE.fullmatch(job_id) or not db.get_job(job_id, user['discord_id']):
+        raise HTTPException(404, 'Registro não encontrado.')
+    path = EXPORTS / f'{job_id}.mp3'
+    if not path.is_file():
+        raise HTTPException(404, 'MP3 processado indisponível.')
+    rate('audio-audit:' + user['discord_id'], 15, 3600)
+    try:
+        return await asyncio.to_thread(audit_audio, path)
+    except AudioAuditError as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 
 @app.get('/api/jobs/{job_id}/audio')
