@@ -1,8 +1,8 @@
-"""Controle conservador de chamadas ao YouTube/SoundCloud (sem bypass de verificação).
+"""Fila por provedor, com pausa LOCAL do YouTube desativada por padrão.
 
-Cada provedor tem fila própria e cooldown após 429/verificação. O estado de bloqueio
-é salvo sob NAPLES_DATA_DIR para sobreviver a um redeploy no Railway com volume.
-Projetado para o deployment do Naples Studios com UMA réplica/worker.
+Isso não ignora erros externos HTTP 429 / LOGIN_REQUIRED: cada tentativa falha
+normalmente se a origem recusar acesso, sem fazer retries automáticos adicionais.
+SoundCloud mantém sua proteção anterior. Uma réplica/worker por processo.
 """
 from collections import OrderedDict
 from contextlib import contextmanager
@@ -55,7 +55,15 @@ def _save_state(state):
             temp_path.unlink(missing_ok=True)
 
 
+def _youtube_pause_enabled():
+    # Opcional: reativar a proteção antiga se o operador desejar.
+    return os.getenv('NAPLES_YOUTUBE_PAUSE_ENABLED', '0').strip().lower() in ('1', 'true', 'yes', 'on')
+
+
 def status(platform):
+    # Ignora inclusive cooldowns antigos ainda existentes no volume do Railway.
+    if platform == 'YouTube' and not _youtube_pause_enabled():
+        return {'cooldown_seconds': 0, 'reason': None}
     if platform not in PROVIDERS:
         return {'cooldown_seconds': 0, 'reason': None}
     with _lock:
@@ -87,7 +95,8 @@ def download_slot(platform):
     with _provider_locks[platform]:
         assert_available(platform)
         env = 'NAPLES_YOUTUBE_MIN_GAP_SECONDS' if platform == 'YouTube' else 'NAPLES_SOUNDCLOUD_MIN_GAP_SECONDS'
-        min_gap = _duration(env, 25 if platform == 'YouTube' else 6, high=120)
+        min_gap = (0 if platform == 'YouTube' and not _youtube_pause_enabled()
+                   else _duration(env, 25 if platform == 'YouTube' else 6, high=120))
         elapsed = time.monotonic() - _last_attempt.get(platform, -1e12)
         if elapsed < min_gap:
             time.sleep(min_gap - elapsed)
@@ -99,6 +108,9 @@ def download_slot(platform):
 def record_failure(platform, code):
     """Pausar falhas de controle de acesso; não repete contra bloqueio conhecido."""
     if platform not in PROVIDERS:
+        return
+    if platform == 'YouTube' and not _youtube_pause_enabled():
+        # Registra o erro no histórico da aplicação, mas NÃO cria pausa local.
         return
     if code == 'SOURCE_RATE_LIMIT':
         seconds = _duration('NAPLES_429_COOLDOWN_SECONDS', 3600, low=60)
