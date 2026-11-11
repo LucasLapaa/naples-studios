@@ -122,7 +122,7 @@ $('previewBtn').addEventListener('click',async()=>{
     showMediaPreview(meta.title,`${meta.platform}${length}${meta.uploader?' · '+meta.uploader:''}${meta.note?' · '+meta.note:''}`);
     if(!$('title').value.trim()) $('title').value=meta.title.slice(0,80);
   }catch(e){
-    if (/\[(YOUTUBE_VERIFICATION|PROVIDER_VERIFICATION|SOURCE_RESTRICTED|SOURCE_FORBIDDEN|SOURCE_RATE_LIMIT)\]/.test(e.message)){
+    if (/\[(YOUTUBE_VERIFICATION|PROVIDER_VERIFICATION|SOURCE_RESTRICTED|SOURCE_FORBIDDEN|SOURCE_RATE_LIMIT|SOURCE_COOLDOWN)\]/.test(e.message)){
       showProviderHelp(e.message.replace(/^\[[A-Z_]+\]\s*/,''));
     }else{toast(e.message,true);}
   }
@@ -182,6 +182,7 @@ function actions(j){
   const arr=[];
   if(j.error)arr.push(`<button type="button" class="mini-btn" data-action="error" data-id="${safe(j.id)}">Ver motivo</button>`);
   if(j.asset_id)arr.push(`<button type="button" class="mini-btn" data-action="copy" data-id="${safe(j.id)}">Copiar ID</button>`);
+  if(j.has_audio)arr.push(`<button type="button" class="mini-btn" data-action="audit" data-id="${safe(j.id)}">Auditar MP3</button>`);
   if(j.has_audio)arr.push(`<button type="button" class="mini-btn" data-action="audio" data-id="${safe(j.id)}">Baixar MP3</button>`);
   if(j.operation && ['erro','pendente','interrompido'].includes(j.status))arr.push(`<button type="button" class="mini-btn" data-action="verify" data-id="${safe(j.id)}">Verificar</button>`);
   if(!liveStatuses.has(j.status))arr.push(`<button type="button" class="mini-btn danger" data-action="delete" data-id="${safe(j.id)}" title="Excluir registro local">×</button>`);
@@ -240,6 +241,19 @@ $('jobsTable').addEventListener('click',async e=>{
     }else if(action==='copy'){
       await navigator.clipboard.writeText(j.asset_id);
       toast('Asset ID '+j.asset_id+' copiado.');
+    }else if(action==='audit'){
+      const d=await api(`/api/jobs/${encodeURIComponent(j.id)}/audio-audit`);
+      const lines=[
+        `Codec: ${d.codec} · ${d.sample_rate_hz} Hz · ${d.channels} canal(is)`,
+        `Duração: ${d.duration_seconds}s · Bitrate: ${d.bitrate_kbps??'não informado'} kbps · Tamanho: ${d.size_mb} MB`,
+        `Pico máximo: ${d.peak_dbfs??'indisponível'} dBFS · Volume médio: ${d.mean_dbfs??'indisponível'} dBFS`,
+        `Validação técnica: ${d.technically_valid?'OK':'Atenção'}`,
+        d.warnings.length?'Alertas: '+d.warnings.join(' | '):'Sem alertas técnicos encontrados.',
+        '', d.note
+      ];
+      $('errorDialogTitle').textContent='Auditoria MP3 · '+j.title;
+      $('errorDialogText').textContent=lines.join('\n');
+      $('errorDialog').showModal();
     }else if(action==='audio'){
       window.location.assign(`/api/jobs/${encodeURIComponent(j.id)}/audio`);
     }else if(action==='delete'){
@@ -288,10 +302,10 @@ init();
 // Diagnóstico autenticado das ferramentas instaladas no backend.
 $('diagnosticsBtn').addEventListener('click', async()=>{
   try{
-    const d = await api('/api/system/diagnostics');
+    const d = await api('/api/system/diagnostics?network=1');
     $('errorDialogTitle').textContent = 'Diagnóstico do servidor Naples Studios';
     $('errorDialogText').textContent =
-      `FFmpeg: ${d.ffmpeg}\nFFprobe: ${d.ffprobe}\nyt-dlp: ${d['yt-dlp']}\nNode: ${d.node}\n\n${d.nota}`;
+      `Domínio do painel: ${d.public_origin}\nIP de saída Railway: ${d.outbound_ip}\nCommit: ${d.railway_commit}\nDeploy: ${d.railway_deployment}\nYouTube: ${d.youtube_guard?.cooldown_seconds ? `em pausa (${d.youtube_guard.cooldown_seconds}s; ${d.youtube_guard.reason})` : "sem pausa registrada"}\nSoundCloud: ${d.soundcloud_guard?.cooldown_seconds ? `em pausa (${d.soundcloud_guard.cooldown_seconds}s; ${d.soundcloud_guard.reason})` : "sem pausa registrada"}\n\nFFmpeg: ${d.ffmpeg}\nFFprobe: ${d.ffprobe}\nyt-dlp: ${d['yt-dlp']}\nNode: ${d.node}\nEJS: ${d['yt-dlp-ejs']}\n\n${d.contexto}\n${d.nota}`;
     $('errorDialog').showModal();
   }catch(err){toast(err.message, true);}
 });
@@ -540,4 +554,37 @@ $('disconnectRobloxBtn').addEventListener('click',async()=>{
 
 $('useRobloxGroup').addEventListener('change',event=>{
   $('groupChoice').hidden=!event.target.checked;
+});
+
+// Naples v14: comparação LOCAL, sem mandar áudio do concorrente para o servidor.
+const qualityCompareBtn = $('qualityCompareBtn');
+if (qualityCompareBtn) qualityCompareBtn.addEventListener('click', async()=>{
+  const a=$('qualityFileNaples').files[0], b=$('qualityFileReference').files[0];
+  const output=$('qualityCompareResult');
+  if(!a||!b){output.textContent='Escolha os dois arquivos de áudio para comparar.';return;}
+  if(a.size>18*1024*1024 || b.size>18*1024*1024){output.textContent='Para comparação no navegador, use arquivos de até 18 MB cada.';return;}
+  qualityCompareBtn.disabled=true;
+  output.textContent='Analisando os arquivos localmente...';
+  const Ctx=window.AudioContext||window.webkitAudioContext;
+  if(!Ctx){output.textContent='Este navegador não suporta análise Web Audio.';qualityCompareBtn.disabled=false;return;}
+  const ctx=new Ctx();
+  async function info(file){
+    const buffer=await ctx.decodeAudioData(await file.arrayBuffer());
+    const skip=Math.max(1,Math.floor(buffer.length/250000));
+    let sum=0,count=0,peak=0;
+    for(let c=0;c<buffer.numberOfChannels;c++){
+      const data=buffer.getChannelData(c);
+      for(let i=0;i<data.length;i+=skip){
+        const v=Math.abs(data[i]);peak=Math.max(peak,v);sum+=v*v;count++;
+      }
+    }
+    const db=v=>v>0?(20*Math.log10(v)).toFixed(1)+' dBFS':'-∞ dBFS';
+    return {duration:buffer.duration.toFixed(2),channels:buffer.numberOfChannels,
+      sampleRate:buffer.sampleRate,peak:db(peak),rms:db(Math.sqrt(sum/Math.max(1,count)))};
+  }
+  try{
+    const x=await info(a), y=await info(b);
+    output.textContent=`NAPLES STUDIOS — ${a.name}\n  Duração: ${x.duration}s | ${x.sampleRate} Hz | ${x.channels} canal(is)\n  Pico: ${x.peak} | RMS: ${x.rms}\n\nREFERÊNCIA — ${b.name}\n  Duração: ${y.duration}s | ${y.sampleRate} Hz | ${y.channels} canal(is)\n  Pico: ${y.peak} | RMS: ${y.rms}\n\nEsta análise não identifica direitos autorais, codec original nem prevê a moderação Roblox. Nenhum dos dois arquivos foi enviado ao servidor.`;
+  }catch(e){output.textContent='Não foi possível decodificar um dos arquivos. Confira se são arquivos de áudio válidos.';}
+  finally{await ctx.close();qualityCompareBtn.disabled=false;}
 });
