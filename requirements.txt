@@ -1,7 +1,10 @@
-fastapi>=0.115,<1
-uvicorn[standard]>=0.30,<1
-python-multipart>=0.0.9,<1
-httpx>=0.27,<1
-yt-dlp[default]>=2025.11.12
-
-cryptography>=44,<48
+# Naples Studios - dependências verificadas em 10/11/2026.
+# Fixadas quando há uma versão estável confirmada; limites evitam mudanças maiores.
+fastapi==0.162.3
+uvicorn[standard]>=0.48,<1
+python-multipart>=0.0.33,<1
+httpx==0.28.1
+# O extra [default] instala yt-dlp-ejs compatível automaticamente.
+# Node 26 LTS é explicitamente ativado em app/core.py (--js-runtimes node).
+yt-dlp[default]==2026.10.26
+cryptography==50.0.2
