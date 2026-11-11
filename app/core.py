@@ -34,7 +34,7 @@ def source_error_code(platform: str, message: str) -> str:
     # HTTP 429 tem prioridade mesmo quando a resposta também menciona login.
     if any(x in msg for x in ('http error 429', 'too many requests', 'rate limit')):
         return 'SOURCE_RATE_LIMIT'
-    if any(x in msg for x in ('not a bot', 'confirm you', 'captcha', 'unusual traffic')):
+    if any(x in msg for x in ('not a bot', 'confirm you', 'captcha', 'unusual traffic', 'login_required', 'sign in to confirm')):
         return 'YOUTUBE_VERIFICATION' if platform == 'YouTube' else 'PROVIDER_VERIFICATION'
     if any(x in msg for x in ('unable to extract client id', 'could not extract client id', 'client_id')):
         return 'SOUNDCLOUD_CLIENT_ID'
@@ -55,11 +55,11 @@ def source_error_code(platform: str, message: str) -> str:
 
 def source_failure_message(platform: str, code: str) -> str:
     messages = {
-        'YOUTUBE_VERIFICATION': 'O YouTube exigiu uma verificação de acesso. O servidor não pode ignorar essa exigência. Para conteúdo seu, obtenha o arquivo por um meio autorizado e use Arquivo local.',
+        'YOUTUBE_VERIFICATION': 'O YouTube exigiu verificação de acesso (LOGIN_REQUIRED). Vincular o Google OAuth2 não fornece uma sessão de download ao yt-dlp. Para áudios autorizados, use um arquivo disponibilizado pelo titular ou tente novamente quando o acesso estiver disponível.',
         'SOUNDCLOUD_CLIENT_ID': 'O extrator não conseguiu obter a identificação de acesso do SoundCloud. Isso pode acontecer quando o serviço limita acessos de servidores. Se a faixa for sua, use o arquivo original; para download habilitado, utilize a opção oficial Baixar arquivo no SoundCloud.',
         'PROVIDER_VERIFICATION': f'O {platform} exigiu verificação de acesso que este servidor não consegue concluir. Use um arquivo disponibilizado pelo titular para download.',
         'SOURCE_RESTRICTED': f'O conteúdo do {platform} exige login, autorização ou é privado. O Naples Studios não acessa conteúdos restritos.',
-        'SOURCE_RATE_LIMIT': f'O {platform} limitou temporariamente as solicitações (HTTP 429). O Naples Studios pausará novas tentativas dessa origem; tente mais tarde ou use um arquivo autorizado.',
+        'SOURCE_RATE_LIMIT': f'O {platform} limitou a importação (HTTP 429). A pausa interna do YouTube está desativada por padrão, mas isso não libera o acesso da origem. Aguarde a liberação ou use um arquivo autorizado.',
         'SOURCE_COOLDOWN': f'O {platform} está em pausa temporária após uma restrição de acesso. Não repetiremos as tentativas até o fim da pausa. Arquivos locais continuam disponíveis.',
         'SOURCE_FORBIDDEN': f'O {platform} negou acesso ao conteúdo (401/403). Verifique as permissões de download da faixa.',
         'SOURCE_NOT_FOUND': f'O endereço do {platform} não está disponível ou foi removido. Confira se é uma faixa individual válida.',
@@ -203,26 +203,35 @@ def run(cmd, timeout):
     return r.stdout.strip()
 
 def normalize_youtube_video_url(url: str) -> str:
-    """Retira parâmetros de playlist/rastreamento de links de vídeo individuais.
+    """Valida um único vídeo e remove parâmetros de rastreamento/playlist.
 
-    Não altera autenticação, IP, cookies ou verificações da plataforma. Se não
-    reconhecer um ID de vídeo válido, devolve a URL recebida sem modificá-la.
+    Não altera cookies, assinatura, geolocalização, autenticação ou verificações
+    da origem. URLs de canais, playlists e buscas não são arquivos individuais.
     """
     if platform_from_url(url) != 'YouTube':
         return url
-    from urllib.parse import parse_qs, quote
+    from urllib.parse import parse_qs
     p = urlparse(url)
     host = (p.hostname or '').lower()
-    video_id = None
+    path = p.path.rstrip('/')
+    video_id = ''
     if host in ('youtu.be', 'www.youtu.be'):
-        video_id = p.path.strip('/').split('/')[0]
-    elif p.path == '/watch' and host in ('youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com'):
+        segments = path.strip('/').split('/')
+        if len(segments) == 1:
+            video_id = segments[0]
+    elif path == '/watch':
         video_id = (parse_qs(p.query).get('v') or [''])[0]
-    elif p.path.startswith('/shorts/') and host in ('youtube.com', 'www.youtube.com'):
-        video_id = p.path.split('/')[2]
-    if video_id and re.fullmatch(r'[a-zA-Z0-9_-]{11}', video_id):
-        return f'https://www.youtube.com/watch?v={video_id}'
-    return url
+    else:
+        segments = path.strip('/').split('/')
+        if len(segments) == 2 and segments[0] in ('shorts', 'live', 'embed', 'v'):
+            video_id = segments[1]
+    if video_id:
+        # IDs oficiais conhecidos são normalizados; formatos inesperados
+        # continuam disponíveis para o extrator, preservando compatibilidade.
+        if re.fullmatch(r'[a-zA-Z0-9_-]{11}', video_id):
+            return f'https://www.youtube.com/watch?v={video_id}'
+        return url
+    raise ProcessingError('Cole o link HTTPS de um vídeo individual do YouTube (watch, youtu.be, Shorts ou live). Links de canal, playlist e busca não são aceitos.')
 
 
 def download_platform(url: str, workdir: Path) -> Path:
@@ -291,7 +300,8 @@ def _oembed_preview(url: str, platform: str, client=None) -> dict:
         return {
             'platform': platform, 'title': title, 'duration': None,
             'uploader': str(data.get('author_name') or '')[:100],
-            'note': 'Prévia pública (oEmbed); NÃO confirma acesso ao áudio. O download pode exigir verificação.'
+            'preview_status': 'metadata_only', 'audio_access_verified': False,
+            'note': 'Metadados públicos consultados. Esta prévia NÃO confirma que a origem fornecerá o áudio.'
         }
     finally:
         if owns_client:
@@ -309,8 +319,9 @@ def preview_platform(url: str) -> dict:
         raw_name = urlparse(url).path.rsplit('/', 1)[-1] or 'Áudio hospedado'
         raw_name = re.sub(r'[^\w .()\-]', '_', raw_name, flags=re.UNICODE).strip()
         return {'platform': platform, 'title': (raw_name or 'Áudio hospedado')[:120],
-                'duration': None, 'uploader': '',
-                'note': 'Arquivo direto; acesso e codec serão validados no envio.'}
+                'duration': None, 'uploader': '', 'preview_status': 'metadata_only',
+                'audio_access_verified': False,
+                'note': 'Link direto; acesso, tamanho e codec serão validados durante a importação.'}
     cache_url = normalize_youtube_video_url(url) if platform == 'YouTube' else url
     from hashlib import sha256
     # Nunca salva URLs assinadas ou de sessão em cache persistente.
@@ -331,8 +342,12 @@ def preview_platform(url: str) -> dict:
         # Após um oEmbed indisponível, não dispara automaticamente um segundo
         # extractor yt-dlp para o MESMO link. Evita multiplicar HTTP 429.
         log.info('Prévia pública %s indisponível: %s', platform, type(exc).__name__)
+        limited = isinstance(exc, ValueError) and 'HTTP 429' in str(exc)
         result = {'platform': platform, 'title': 'Prévia indisponível', 'duration': None,
-                  'uploader': '', 'note': 'Não foi possível consultar a prévia pública. Enviar o link não garante acesso ao arquivo.'}
+                  'uploader': '', 'preview_status': 'rate_limited' if limited else 'unavailable',
+                  'audio_access_verified': False,
+                  'note': ('A origem limitou a consulta de metadados (HTTP 429). Isso não é uma pausa do Naples Studios.'
+                           if limited else 'Não foi possível consultar os metadados públicos. O acesso ao áudio também não está confirmado.')}
         provider_guard.preview_put(cache_key, result, ttl_seconds=180)
         return result
 

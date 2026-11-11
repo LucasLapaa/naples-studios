@@ -25,7 +25,7 @@ from .audio_audit import audit_audio, AudioAuditError
 from .roblox_key import inspect_key, KeyInspectionError, allowed_destination
 from .core import (
     MAX_FILE_BYTES, ProcessingError, PlatformAccessError, convert_2_5x, create_roblox_asset,
-    download_platform, platform_from_url, preview_platform, poll_roblox_asset, source_reference_for_history, valid_creator_id, valid_title
+    download_platform, platform_from_url, normalize_youtube_video_url, preview_platform, poll_roblox_asset, source_reference_for_history, valid_creator_id, valid_title
 )
 
 EXPORTS = config.DATA / 'exports'
@@ -82,6 +82,10 @@ def job_json(row):
     d = dict(row)
     d.pop('discord_user_id', None)
     d['has_audio'] = (EXPORTS / f"{d['id']}.mp3").is_file()
+    # Expor um código estável de falha sem alterar o esquema SQLite existente.
+    # O conteúdo detalhado do yt-dlp permanece apenas nos logs protegidos.
+    match = re.search(r'Falha na fonte \[([A-Z_]+)\]', d.get('stage') or '')
+    d['source_error_code'] = match.group(1) if match else None
     return d
 
 
@@ -669,7 +673,7 @@ def system_diagnostics(request: Request):
     versions['contexto'] = 'Alterar o domínio do site não altera o destino das chamadas do yt-dlp. Redeploys podem mudar o ambiente/IP de saída do Railway.'
     versions['youtube_guard'] = provider_guard.status('YouTube')
     versions['soundcloud_guard'] = provider_guard.status('SoundCloud')
-    versions['nota'] = 'Pausas de origem evitam novas chamadas durante HTTP 429/verificação. Não garantem liberação de download.'
+    versions['nota'] = 'A pausa interna do YouTube está desativada por padrão (v21). HTTP 429/LOGIN_REQUIRED são recusas do YouTube e não podem ser liberadas pelo domínio nem pelo login OAuth2.'
     return versions
 
 
@@ -719,6 +723,8 @@ async def submit_job(request: Request, title: str = Form(...), creator_id: str =
             raise ProcessingError('Envie um arquivo OU informe um link, não ambos.')
         if url:
             platform = platform_from_url(url)
+            if platform == 'YouTube':
+                url = normalize_youtube_video_url(url)
             if not config.ENABLE_PLATFORM_LINKS:
                 raise ProcessingError('Importação de links está desabilitada no servidor.')
         else:
@@ -801,6 +807,11 @@ async def submit_link_batch(request: Request):
                 raise ProcessingError(f'Linha {index}: link inválido.')
             url=url.strip()
             platform=platform_from_url(url)
+            if platform == 'YouTube':
+                try:
+                    url = normalize_youtube_video_url(url)
+                except ProcessingError as exc:
+                    raise ProcessingError(f'Linha {index}: {exc}') from exc
             if url in seen:
                 raise ProcessingError(f'Linha {index}: link repetido neste lote.')
             seen.add(url)
