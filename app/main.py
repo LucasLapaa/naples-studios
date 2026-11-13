@@ -19,7 +19,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, Response, Uploa
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import config, database as db, settings_store as store, provider_guard, billing
+from . import config, database as db, settings_store as store, provider_guard, billing, image_upload
 from .asset_monitor import inspect_asset
 from .audio_audit import audit_audio, AudioAuditError
 from .roblox_key import inspect_key, KeyInspectionError, allowed_destination
@@ -129,6 +129,7 @@ async def run_job(*args):
 async def lifespan(app: FastAPI):
     db.initialize()
     billing.init_db()
+    image_upload.initialize()
     store.initialize()
     config.reload_settings()
     # Sessões seguras funcionam mesmo sem conta administrativa/Roblox cadastrada.
@@ -770,6 +771,92 @@ async def media_preview(request: Request):
         return await asyncio.to_thread(preview_platform, url)
     except ProcessingError as exc:
         raise HTTPException(400, str(exc)) from exc
+
+
+# ---------------------------------------------------------------------------
+# v24: upload de imagem / decal separado, com a mesma chave Open Cloud pessoal.
+# Este fluxo não altera a fila de áudio, faturamento, moderação ou cookies.
+# ---------------------------------------------------------------------------
+
+@app.get('/api/images/jobs')
+def image_jobs(request: Request):
+    user = authorize_request(request)
+    return {'jobs': image_upload.list_jobs(user['discord_id'])}
+
+
+@app.post('/api/images', status_code=202)
+async def image_submit(request: Request, title: str = Form(...), asset_type: str = Form('Decal'),
+                       image_file: UploadFile = File(...)):
+    user = authorize_request(request, mutate=True)
+    rate('images:' + user['discord_id'], 35, 3600)
+    try:
+        title = valid_title(title)
+        if asset_type not in ('Decal', 'Image'):
+            raise ProcessingError('Selecione Decal ou Imagem.')
+        connection = current_roblox_credential(user['discord_id'])
+        if not connection:
+            raise ProcessingError('Conecte sua API Key na página Roblox Key primeiro.')
+        creator_id = valid_creator_id(connection['creator_id'])
+        creator_type = connection['creator_type']
+        filename = (image_file.filename or '')[:255]
+        suffix = Path(filename).suffix.lower()
+        if suffix not in ('.png','.jpg','.jpeg'):
+            raise ProcessingError('Escolha um arquivo PNG ou JPG/JPEG.')
+    except ProcessingError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    job_id = uuid.uuid4().hex
+    path = TEMP / ('image_' + job_id + suffix)
+    total = 0
+    try:
+        with path.open('wb') as output:
+            while data := await image_file.read(262144):
+                total += len(data)
+                if total > image_upload.MAX_IMAGE_BYTES:
+                    raise HTTPException(413, 'Imagem excede 10 MB.')
+                output.write(data)
+        await asyncio.to_thread(image_upload.validate_image, path, filename)
+        image_upload.create_job(job_id, user['discord_id'], title, filename, asset_type,
+                                creator_type, creator_id)
+    except ProcessingError as exc:
+        path.unlink(missing_ok=True)
+        raise HTTPException(400, str(exc)) from exc
+    except Exception:
+        path.unlink(missing_ok=True)
+        raise
+    finally:
+        await image_file.close()
+    async def work():
+        await asyncio.to_thread(image_upload.process_image, job_id, path, title, creator_id,
+                                creator_type, connection['api_key'], asset_type)
+    task = asyncio.create_task(work())
+    TASKS.add(task)
+    task.add_done_callback(TASKS.discard)
+    return {'job_id':job_id, 'status':'fila', 'message':'Imagem adicionada à fila.'}
+
+
+@app.post('/api/images/{job_id}/verify')
+async def image_verify(job_id: str, request: Request):
+    user = authorize_request(request, mutate=True)
+    if not ID_RE.fullmatch(job_id):
+        raise HTTPException(400, 'Identificador inválido.')
+    job = image_upload.get_job(user['discord_id'], job_id)
+    if not job:
+        raise HTTPException(404, 'Imagem não encontrada.')
+    if job['asset_id']:
+        return {'asset_id':job['asset_id'],'status':'concluido'}
+    if not job['operation']:
+        raise HTTPException(409, 'A operação Roblox ainda não foi criada.')
+    credential = current_roblox_credential(user['discord_id'])
+    if not credential or credential['creator_id'] != job['creator_id'] or credential['creator_type'] != job['creator_type']:
+        raise HTTPException(403, 'Conecte a chave Roblox usada no upload para verificar.')
+    try:
+        asset_id = await asyncio.to_thread(poll_roblox_asset, job['operation'], credential['api_key'], None, 3, 1)
+    except ProcessingError as exc:
+        raise HTTPException(502, str(exc)[:350]) from exc
+    if asset_id:
+        image_upload.update(job_id,status='concluido',asset_id=str(asset_id),error=None)
+        return {'asset_id':str(asset_id),'status':'concluido'}
+    return {'asset_id':None,'status':'pendente'}
 
 
 @app.get('/api/jobs')
