@@ -1,0 +1,128 @@
+/* Naples Studios v24 — interface aprovada, sem alterações no checkout/login. */
+#appView{
+  --bg:#0a1223;--panel:#101c30;--panel2:#132238;--panel3:#0c1728;
+  --muted:#93a4be;--text:#f3f7ff;--line:#253650;--lime:#19ee91;
+  --green:#0fd878;--deep:#0b3d34;
+  background:#0c1528;color:#f2f5fc;min-height:100vh
+}
+#appView.app-layout{background:#0c1528;grid-template-columns:278px minmax(0,1fr)}
+#appView .sidebar{background:#080f20;border-right:1px solid #202d45;padding:26px 16px 20px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#283d59 transparent}
+#appView .sidebar .brand{padding:0 10px;margin-bottom:40px;gap:14px}
+#appView .sidebar .mark{background:linear-gradient(135deg,#20f3a2,#05cc70);border-radius:12px;transform:none;width:50px;height:50px}
+#appView .sidebar .mark span{transform:none;font-weight:950}
+#appView .sidebar .brand-name strong{font-size:18px;letter-spacing:-.4px}
+#appView .sidebar .brand-name small{letter-spacing:1.8px;color:#9ab3ca}
+#appView .side-section-label{color:#647895;letter-spacing:1.6px;margin-bottom:14px;font-size:10px}
+#appView .main-nav{gap:5px}
+#appView .nav-item{border:1px solid transparent;color:#c0cbe1;font-size:14px;font-weight:740;letter-spacing:-.08px;padding:13px 14px;border-radius:9px;min-height:47px}
+#appView .nav-item:hover{background:#152844;color:#fff}
+#appView .nav-item.active{background:linear-gradient(105deg,#20eb98,#09d27c);border-color:#10ce7b;color:#06182a;box-shadow:0 7px 30px #13ec8930}
+#appView .nav-glyph{font-size:22px;width:24px;font-weight:800}
+#appView .sidebar-bottom{border-top:1px solid #223249;padding-top:18px}
+#appView .engine-status{background:#111f34;border:1px solid #243a52;border-radius:12px}
+#appView .engine-status b{color:#dbf4e7}
+#appView .sidebar-help{background:#0d1d2e;border-color:#263c52}
+#appView .sidebar-version{color:#7a8aa4}
+#appView .main-content{min-width:0;background:radial-gradient(ellipse at 70% -15%,#122341 0%,#0c1529 49%,#0b1426 100%)}
+#appView .topbar{height:83px;padding:0 clamp(20px,2.5vw,36px);border-bottom:1px solid #20314b}
+#appView .topbar-location{color:#1bf0a1;letter-spacing:1px;font-size:12px}
+#appView .topbar-location strong{color:#1bf0a1}
+#appView .v24-pulse{font-size:18px}
+#appView .connection{background:#12263b;padding:9px 12px;border:1px solid #284159;border-radius:24px;color:#a9c7d2}
+#appView .connection i{background:#28e6a4}
+#appView .profile{background:#111d33;border:1px solid #2a3955;border-radius:12px;padding:6px 12px 6px 7px}
+#appView .profile-name span{color:#9caec1}
+#appView .signout,#appView .round-action{background:#152137;border:1px solid #30425e;color:#dbe8ff}
+#appView .content-wrap{max-width:1670px;padding:34px clamp(18px,2.4vw,36px) 70px}
+#appView .v24-overview-heading{margin-bottom:28px}
+#appView .v24-overview-heading h1{font-size:clamp(27px,3vw,37px);font-weight:900;letter-spacing:-1.2px;margin:7px 0 10px}
+#appView .v24-overview-heading p{color:#a1b1c9;font-size:14px}
+#appView .v24-kicker{font-weight:900;font-size:11px;color:#21e7a3;letter-spacing:1.3px}
+#appView .v24-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:15px;margin:0 0 21px}
+#appView .v24-metric{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;background:#101a2d;border:1px solid #283751;border-radius:14px;padding:23px 21px;min-height:145px;min-width:0}
+#appView .v24-metric span{font-weight:650;font-size:13px;color:#9eaec5}
+#appView .v24-metric strong{display:block;color:white;font-size:clamp(22px,2.4vw,32px);font-weight:900;letter-spacing:-.8px;overflow-wrap:anywhere;margin:10px 0 4px}
+#appView .v24-metric p{font-size:11px;line-height:1.4;color:#94a4bc}
+#appView .v24-metric p span{font-size:11px}
+#appView .v24-metric>b{flex-shrink:0;display:grid;place-items:center;width:46px;height:46px;border-radius:12px;background:#103c37;color:#2ff1af;font-size:27px;font-weight:500}
+#appView .v24-panel{background:#0f1c30;border:1px solid #2a3d57;border-radius:14px;padding:23px 24px;margin-bottom:20px;box-shadow:0 14px 50px #020a1614}
+#appView .v24-panel h2{font-size:23px;font-weight:900;letter-spacing:-.5px}
+#appView .v24-panel p{color:#a3b1c8;margin-top:5px;font-size:13px}
+#appView .v24-action-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px;margin-top:20px}
+#appView .v24-action-grid a{display:flex;align-items:center;justify-content:center;min-height:57px;text-align:center;border-radius:10px;background:#14e18b;color:#04271f;font-weight:900;font-size:13px;padding:10px 8px;transition:transform .2s,filter .2s}
+#appView .v24-action-grid a:hover{filter:brightness(1.12);transform:translateY(-2px)}
+#appView .v24-info{display:flex;gap:19px;align-items:center;padding:19px 25px;background:linear-gradient(104deg,#0b3a38,#0d302e 60%,#092d35);border:1px solid #186c5a;border-radius:14px;margin-bottom:20px}
+#appView .v24-info-icon{display:grid;place-items:center;width:40px;height:40px;min-width:40px;border:2px solid #20e7a3;border-radius:50%;color:#2ff2ad;font-size:23px}
+#appView .v24-info h3{font-size:18px;font-weight:900}
+#appView .v24-info p{color:#cae0d7;font-size:12px;line-height:1.65;margin-top:5px}
+#appView .v24-info-glyph{font-size:68px;margin-left:auto;color:#26e99c;opacity:.6}
+#appView .v24-recent-head{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:18px}
+#appView .v24-recent-head>a{border:1px solid #354964;padding:12px 16px;border-radius:9px;color:#f1f5fb;font-weight:750}
+#appView .v24-recent-list{display:grid;gap:7px}
+#appView .v24-recent-row{display:grid;grid-template-columns:minmax(200px,1.6fr) minmax(80px,.8fr) minmax(120px,.8fr) minmax(100px,.7fr);gap:15px;align-items:center;background:#132139;border-radius:10px;padding:13px 16px;color:#dce8f6;font-size:12px}
+#appView .v24-recent-row strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#appView .v24-recent-row .v24-state{color:#34e7a6;font-weight:850}
+#appView .block-section{margin:0 auto 50px;max-width:1450px;min-height:420px}
+#appView .section-heading{margin-bottom:24px;align-items:center}
+#appView .section-heading h2{font-size:31px;color:#f6f9ff}
+#appView .section-heading p{color:#a6b4ca}
+#appView .section-index{color:#1ee9a1}
+#appView .surface{background:linear-gradient(145deg,#121f34,#0e1b2e);border:1px solid #293e57;border-radius:15px}
+#appView .flow-panel,#appView .studio-form,#appView .v7-pad{background:#111e32}
+#appView .flow-panel .flow-title{color:#d9ebf7}
+#appView .input-group>label:not(.drop-zone){color:#b6c8e0}
+#appView .input-group input:not([type=file]),#appView .input-group select,#appView textarea:not([type=file]),#appView select{background:#0c182b;border-color:#30465e;color:#f6faff}
+#appView .source-toggle{background:#0a1627;border-color:#31465c}
+#appView .source-option.active{background:#0e483f;color:#62f7bc;border-color:#247f63}
+#appView .hint,#appView .v7-muted{color:#a4b5c8}
+#appView .submit-btn{background:linear-gradient(105deg,#16ed94,#0bd37a);color:#06271e;border:0;box-shadow:0 8px 26px #07da772b}
+#appView .secondary-btn{background:#162b40;border:1px solid #355370;color:#d7f6ee}
+#appView .secondary-btn:hover{background:#194c44;color:#bffff0}
+#appView .feature-chip{background:#103c36;border-color:#19765e;color:#66f4b7}
+#appView .permission-box,#appView .naples-publish-target{background:#102f32;border-color:#265c57}
+#appView .v24-terms-note{margin:15px 0 0;border-left:3px solid #15df8d;padding:10px 12px;color:#b5d3cb;background:#10312f;font-size:11px;line-height:1.55;border-radius:5px}
+#appView .history-surface,#appView .v7-metrics>div{background:#111d32;border-color:#304259}
+#appView .v7-mobile-nav{background:#0a1528;border-color:#203752}
+#appView .v7-mobile-nav a{background:#12263c;color:#c3dfdd}
+#appView .v24-image-layout{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(300px,.8fr);gap:20px}
+#appView .v24-image-drop{border:1px dashed #31ae7e;background:#102e35;border-radius:12px;padding:35px 22px;min-height:175px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;cursor:pointer;text-align:center}
+#appView .v24-image-drop>span{font-size:35px;color:#3afab2}
+#appView .v24-image-drop>small{font-size:12px;color:#add1c5}
+#appView #imageFile{position:absolute;width:1px;height:1px;overflow:hidden;opacity:0}
+#appView .v24-image-preview{padding:11px;background:#081425;border:1px solid #274156;border-radius:13px;text-align:center}
+#appView .v24-image-preview img{max-width:100%;max-height:280px;object-fit:contain;border-radius:8px}
+#appView .v24-image-history{margin-top:25px}
+#appView .v24-image-job-list{display:grid;gap:12px}
+#appView .v24-image-job{display:grid;grid-template-columns:minmax(180px,1fr) auto auto;align-items:center;gap:15px;background:#132139;border:1px solid #2a3b54;padding:14px 17px;border-radius:11px}
+#appView .v24-image-job strong{font-size:13px;display:block;color:#eef6ff}
+#appView .v24-image-job small{color:#9bb1c8;display:block;margin-top:5px;max-width:520px;overflow-wrap:anywhere}
+#appView .v24-image-job .v24-image-status{font-weight:820;font-size:12px;color:#31e7a4}
+#appView .v24-image-job button{border:1px solid #307157;border-radius:8px;padding:9px 13px;background:#103a34;color:#b2ffdc;font-weight:850}
+#appView .v24-image-job button:disabled{opacity:.5}
+@media (max-width:1350px){
+ #appView .v24-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+ #appView .v24-action-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ #appView .v24-image-layout{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:980px){
+ #appView.app-layout{grid-template-columns:minmax(0,1fr)}
+ #appView .sidebar{height:auto;position:relative;display:block;padding:15px 18px}
+ #appView .sidebar .brand{margin:0}
+ #appView .sidebar .main-nav,#appView .sidebar .side-section-label,#appView .sidebar .sidebar-bottom{display:none}
+ #appView .content-wrap{padding:22px 17px 60px}
+ #appView .topbar{height:75px;padding:0 17px}
+ #appView .connection{display:none}
+ #appView .v7-mobile-nav{display:flex}
+}
+@media (max-width:590px){
+ #appView .v24-metrics,#appView .v24-action-grid{grid-template-columns:1fr}
+ #appView .v24-metric{min-height:113px}
+ #appView .v24-info-glyph{display:none}
+ #appView .v24-recent-row{grid-template-columns:1fr 1fr;gap:8px}
+ #appView .v24-recent-row span:nth-child(2){overflow-wrap:anywhere}
+ #appView .v24-recent-head{align-items:flex-start;flex-direction:column}
+ #appView .v24-image-job{grid-template-columns:minmax(0,1fr);gap:9px}
+ #appView .profile-name{display:none}
+ #appView .topbar-location strong{font-size:10px}
+ #appView .section-heading{align-items:start;flex-direction:column}
+}

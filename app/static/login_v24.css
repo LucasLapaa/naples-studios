@@ -1,0 +1,153 @@
+/* Naples Studios v24.1 — apenas a aparência da tela de login.
+   NÃO altera OAuth, sessões, cobrança, permissões ou endpoints.
+   Mantém o único método de entrada: /auth/discord. */
+#loginView.login-page{
+  --login-ink:#081123;--login-green:#11e58d;--login-line:#263952;
+  min-height:100vh;background:#081123;color:#f7faff;
+  isolation:isolate;overflow:hidden;
+}
+#loginView .login-inner{
+  display:grid;grid-template-columns:minmax(0,1.05fr) minmax(420px,.95fr);
+  min-height:100vh;
+}
+#loginView .login-story{
+  position:relative;min-height:680px;
+  padding:clamp(34px,4.6vw,70px) clamp(32px,5.5vw,88px) 45px;
+  background:radial-gradient(ellipse at 60% 36%,#183852 0%,#101f39 34%,#0a152a 70%,#080f21 100%);
+  border-right:1px solid #283650;
+  display:flex;justify-content:space-between;
+  overflow:hidden;
+}
+#loginView .login-story::before{
+  content:"";position:absolute;inset:-30%;pointer-events:none;
+  background:radial-gradient(closest-side at 38% 50%,#11f19917,transparent 72%);
+}
+#loginView .login-story::after{
+  content:"";position:absolute;inset:0;pointer-events:none;opacity:.3;
+  background-image:linear-gradient(#4596b310 1px,transparent 1px),linear-gradient(90deg,#4596b310 1px,transparent 1px);
+  background-size:44px 44px;mask-image:linear-gradient(180deg,transparent,#000 20%,#000 85%,transparent);
+}
+#loginView .brand{z-index:2;position:relative;align-self:flex-start}
+#loginView .mark{
+  transform:none;width:49px;height:49px;border-radius:12px;
+  background:linear-gradient(140deg,#35f6ae,#09cb7e);box-shadow:0 5px 32px #07e98e35;
+}
+#loginView .mark span{transform:none;font-style:normal;letter-spacing:-2px;padding:0;font-weight:1000}
+#loginView .brand-name strong{font-size:19px;letter-spacing:.6px}
+#loginView .brand-name small{font-size:10px;letter-spacing:2.3px;color:#a5bacf}
+#loginView .login-visual{
+  z-index:2;align-self:center;position:relative;
+  width:min(500px,100%);height:390px;margin:10px auto;
+  display:grid;place-items:center;filter:drop-shadow(0 24px 40px #0005)
+}
+#loginView .login-visual::before{
+  content:"";width:78%;height:78%;border-radius:50%;position:absolute;
+  background:radial-gradient(circle,#14ef9b18 0%,transparent 58%);
+  box-shadow:0 0 120px #0ff5a113;
+}
+#loginView .orbit{border-color:#46e7b041}
+#loginView .orbit-1{width:300px;height:300px;border-width:1px;box-shadow:inset 0 0 60px #05e4a008}
+#loginView .orbit-2{width:365px;height:365px;border-color:#4cdca42c;border-style:dashed;animation:rotate 100s linear infinite}
+#loginView .record{
+  width:270px;height:270px;border:2px solid #41ffc090;
+  background:repeating-radial-gradient(circle at 50% 50%,#0c192b 0 8px,#143b3e 9px 10px,#0a1729 11px 18px);
+  box-shadow:0 0 0 12px #102c3447,0 0 80px #18f5a031,inset 0 0 30px #0e323c;
+  animation:rotate 38s linear infinite;
+}
+#loginView .record-core{
+  width:86px;height:86px;background:linear-gradient(140deg,#67ffd0,#0edc91);color:#06241e;
+  box-shadow:0 3px 32px #0cf49c88;font-size:48px;font-weight:1000;
+}
+#loginView .record-core span{color:#0b634e}
+#loginView .soundbars{bottom:1px;gap:8px;opacity:.85}
+#loginView .soundbars b{background:#20e6a3;box-shadow:0 0 16px #0cffaa55}
+#loginView .floating-tag{top:21px;right:3%;background:#0c2436;color:#77f3b8;border:1px solid #2d846c;letter-spacing:1.3px;font-weight:850}
+#loginView .login-copy{position:relative;z-index:2;max-width:590px}
+#loginView .login-copy .micro-label{font-size:11px;letter-spacing:1.8px;color:#49f7b2}
+#loginView .login-copy h1{
+  color:#fff;font-size:clamp(38px,4.4vw,67px);line-height:1.06;font-weight:950;
+  letter-spacing:-2.8px;margin:15px 0 18px;text-wrap:balance;
+}
+#loginView .login-copy h1 em{color:#1bf09b}
+#loginView .login-copy p{font-size:15px;line-height:1.7;color:#abbfd8;max-width:550px}
+#loginView .login-aside{
+  background:radial-gradient(ellipse at 100% 3%,#14233f 0%,#0c1428 50%,#091123 100%);
+  padding:clamp(30px,5vw,75px) clamp(25px,5.3vw,72px);
+  gap:20px;
+}
+#loginView .login-card{
+  position:relative;overflow:hidden;width:min(490px,100%);padding:42px 42px 37px;
+  background:linear-gradient(160deg,#14233b,#0e1a2c 66%,#0e1b2b);
+  border:1px solid #32465d;border-radius:23px;box-shadow:0 28px 100px #0307126b;
+}
+#loginView .login-card::before{
+  content:"";position:absolute;left:0;right:0;top:0;height:3px;
+  background:linear-gradient(90deg,transparent,#12f5a0 32%,#16eaa0 68%,transparent);
+}
+#loginView .auth-mark{color:#37efaa;font-weight:900;letter-spacing:1.4px;font-size:10px}
+#loginView .tiny-symbol{
+  margin:24px 0 18px;display:grid;place-items:center;width:59px;height:59px;
+  border:1px solid #2d816f;border-radius:16px;background:#0b3b39;color:#34f2a9;
+  box-shadow:inset 0 0 25px #11d99119;font-size:33px;
+}
+#loginView .login-card h2{font-weight:900;font-size:clamp(32px,3.2vw,44px);letter-spacing:-1.5px;line-height:1.14;margin:0 0 17px;color:#f9fcff}
+#loginView .login-card h2 span{color:#31efa9}
+#loginView .login-card>p:not(.login-error){color:#a7b7ce;line-height:1.7;font-size:14px}
+#loginView .discord-button{
+  min-height:60px;margin-top:28px;padding:15px 19px;
+  border-radius:11px;justify-content:center;gap:14px;
+  background:linear-gradient(105deg,#21f19f,#0cd383);
+  border:1px solid #28e69a;color:#071d1b;
+  font-weight:900;letter-spacing:.1px;font-size:14px;
+  box-shadow:0 12px 30px #10e79428;transition:transform .18s,box-shadow .18s,filter .18s;
+}
+#loginView .discord-button:hover{background:linear-gradient(105deg,#65ffd0,#1ef0a4);filter:brightness(1.03);transform:translateY(-2px);box-shadow:0 16px 32px #11ed9b3b}
+#loginView .discord-button:active{transform:translateY(0)}
+#loginView .discord-button svg{width:25px;height:25px}
+#loginView .discord-button b{margin-left:auto;font-size:20px}
+#loginView .auth-note{margin-top:22px;color:#a3bdc2;font-size:12px}
+#loginView .lock-dot{background:#16ec9f}
+#loginView .card-rule{background:#2c3c55;margin:29px 0 19px}
+#loginView .mini-info{color:#8ca4bf;font-size:9px;letter-spacing:1.4px}
+#loginView .login-error{background:#3c2032;border-color:#905066;color:#ffb4c6}
+#loginView .footnote{color:#7c91aa;font-size:10px;letter-spacing:1.4px;text-align:center}
+#loginView .v24-login-flag{display:inline-flex;align-items:center;gap:10px;border:1px solid #316551;background:#0a2a2b;color:#9ffbd4;border-radius:60px;padding:8px 13px;margin-bottom:16px;font-size:10px;font-weight:850;letter-spacing:1.3px}
+#loginView .v24-login-flag::before{content:"";display:inline-block;width:7px;height:7px;background:#21f5ad;box-shadow:0 0 10px #17f09d;border-radius:50%}
+#loginView .v24-login-features{display:flex;flex-wrap:wrap;gap:9px;margin-top:22px}
+#loginView .v24-login-features span{display:inline-flex;align-items:center;gap:7px;font-size:11px;color:#b5d6ca;border:1px solid #315254;background:#0b2634;border-radius:22px;padding:8px 11px}
+#loginView .v24-login-features b{font-size:13px;color:#2ef6ad}
+@media(max-width:1110px){
+ #loginView .login-inner{grid-template-columns:minmax(0,1fr) minmax(390px,.95fr)}
+ #loginView .login-story{padding:38px 35px}
+ #loginView .login-copy h1{font-size:44px}
+ #loginView .login-visual{height:330px}
+ #loginView .orbit-1{width:260px;height:260px}
+ #loginView .orbit-2{width:330px;height:330px}
+ #loginView .record{width:222px;height:222px}
+ #loginView .login-card{padding:34px 29px}
+}
+@media(max-width:790px){
+ #loginView .login-inner{display:flex;flex-direction:column}
+ #loginView .login-story{min-height:unset;padding:24px 22px 32px;border-right:0;border-bottom:1px solid #263c50}
+ #loginView .login-story .brand{margin-bottom:27px}
+ #loginView .login-visual{display:none}
+ #loginView .login-copy h1{font-size:clamp(34px,7vw,50px);letter-spacing:-1.5px}
+ #loginView .login-copy p{font-size:13px}
+ #loginView .login-aside{flex:1;padding:25px 19px 37px}
+ #loginView .login-card{max-width:510px;padding:30px 24px}
+}
+@media(max-width:460px){
+ #loginView .login-story{padding:22px 18px 27px}
+ #loginView .login-story .brand{margin-bottom:19px}
+ #loginView .login-copy h1{font-size:34px;margin:10px 0 13px}
+ #loginView .v24-login-flag{font-size:9px;padding:7px 10px}
+ #loginView .login-card h2{font-size:31px}
+ #loginView .tiny-symbol{margin-top:18px}
+ #loginView .footnote{font-size:9px}
+}
+@media(prefers-reduced-motion:reduce){
+ #loginView .record,#loginView .orbit-2,#loginView .soundbars b{animation:none!important}
+ #loginView .discord-button{transition:none}
+}
+/* Distancia etiqueta e subtítulo, inclusive em telas estreitas. */
+#loginView .login-copy .micro-label{display:block;margin:0 0 8px}

@@ -178,7 +178,6 @@ $('uploadForm').addEventListener('submit',async e=>{
   e.preventDefault();
   const form=new FormData();
   const title=$('title').value.trim();
-  if(!$('rights').checked){toast('Confirme a autorização do áudio.',true);return;}
   form.set('title',title);
   form.set('rights_confirmed','true');
   if(currentSource==='url'){
@@ -196,7 +195,6 @@ $('uploadForm').addEventListener('submit',async e=>{
     toast('Áudio enviado para a fila. O progresso aparecerá no histórico.');
     $('title').value='';$('sourceUrl').value='';$('audioFile').value='';
     $('fileLabel').textContent='MP3, WAV, OGG, FLAC, M4A, WEBM · Até 50 MB';
-    $('rights').checked=false;
     await fetchJobs();
     $('history').scrollIntoView({behavior:'smooth',block:'start'});
   }catch(e){toast(e.message,true);}
@@ -255,6 +253,7 @@ async function fetchJobs(){
     }
     lastJobIds=new Set(jobs.filter(j=>j.status==='concluido').map(j=>j.id));
     renderJobs();
+    window.NaplesV24?.recent(jobs);
     renderBatchProgress();
     renderMonitor();
     renderCollections();
@@ -330,6 +329,7 @@ async function init(){
       return;
     }
     showApp(result.user,result.config,result.billing);
+    window.NaplesV24?.start({csrf:result.csrf,user:result.user,config:result.config,billing:result.billing});
     await fetchJobs();
     await Promise.all([fetchCollections(),loadConnection()]);
     if(!result.config.roblox_connected && !sessionStorage.getItem('naples-key-tip')){sessionStorage.setItem('naples-key-tip','1');location.hash='#roblox-key';toast('Bem-vindo! Conecte sua Roblox Key para começar a publicar.');}
@@ -522,7 +522,6 @@ function renderBatchProgress(){
 $('batchForm').addEventListener('submit',async(e)=>{
   e.preventDefault();
   if(batchFileUploading)return;
-  if(!$('batchRights').checked){toast('Confirme os direitos de todas as músicas.',true);return;}
   const button=$('batchSubmitBtn');const label=button.querySelector('span');
   button.disabled=true;
   try{
@@ -563,7 +562,6 @@ $('batchForm').addEventListener('submit',async(e)=>{
       toast(`${accepted} arquivos adicionados. ${failed.length} não enviados.`,!!failed.length);
       if(failed.length){$('batchProgressBox').hidden=false;$('batchProgressText').textContent=`${accepted} aceitos · ${failed.length} falhas de envio: ${failed.slice(0,2).join(' | ')}`;}
     }
-    $('batchRights').checked=false;
     await fetchJobs();
   }catch(err){toast(err.message,true);}
   finally{batchFileUploading=false;button.disabled=false;label.textContent='ADICIONAR LOTE À FILA';}

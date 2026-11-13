@@ -1,150 +1,167 @@
-<!doctype html>
+<!DOCTYPE html>
+
 <html lang="pt-BR">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#071411">
-  <meta name="description" content="Naples Studios, plataforma privada de processamento e publicação de áudios no Roblox.">
-  <title>Naples Studios | Audio Cloud</title>
-  <link rel="stylesheet" href="/static/styles.css">
-  <link rel="stylesheet" href="/static/billing.css">
-  <script src="/static/billing.js" defer></script>
-  <script src="/static/app.js" defer></script>
-</head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<meta content="#0b1427" name="theme-color"/>
+<meta content="Naples Studios, plataforma privada de processamento e publicação de áudios no Roblox." name="description"/>
+<title>Naples Studios | Audio Cloud</title>
+<link href="/static/styles.css" rel="stylesheet"/>
+<link href="/static/billing.css" rel="stylesheet"/>
+<script defer="" src="/static/billing.js"></script>
+<script defer="" src="/static/app.js?v=241"></script>
+<link href="/static/studio_v24.css?v=241" rel="stylesheet"/>
+<script defer="" src="/static/studio_v24.js?v=241"></script><link href="/static/login_v24.css?v=241" rel="stylesheet"/></head>
 <body>
-  <div class="grain" aria-hidden="true"></div>
-  <div id="loginView" class="login-page" hidden>
-    <div class="login-inner">
-      <section class="login-story">
-        <div class="brand light"><div class="mark"><span>N</span></div><div class="brand-name"><strong>NAPLES</strong><small>STUDIOS</small></div></div>
-        <div class="login-visual"><div class="orbit orbit-1"></div><div class="orbit orbit-2"></div><div class="record"><div class="record-core">N<span>✦</span></div></div><div class="soundbars" aria-hidden="true"><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b></div><span class="floating-tag">AUDIO ENGINE / 2.5X</span></div>
-        <div class="login-copy"><span class="micro-label">YOUR SOUND. YOUR UNIVERSE.</span><h1>O próximo nível<br>do seu <em>áudio.</em></h1><p>Importe. Processe. Publique. Sua conta pessoal para preparar e publicar assets de áudio autorizados no Roblox.</p></div>
-      </section>
-      <section class="login-aside"><div class="login-card"><span class="auth-mark">DEV NAPLES</span><div class="tiny-symbol">✧</div><h2>Bem-vindo ao<br><span>Naples Studios.</span></h2><p>Entre com seu Discord. Sua conta Naples Studios será criada automaticamente e você terá seu próprio histórico de publicações.</p><a class="discord-button" href="/auth/discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19.8 5.3a19.2 19.2 0 0 0-4.8-1.5l-.6 1.3a17.5 17.5 0 0 0-5 0l-.6-1.3A19.6 19.6 0 0 0 4 5.3C1 9.6.2 13.8.6 18a19.8 19.8 0 0 0 5.9 3c.5-.7 1-1.5 1.3-2.3-.7-.3-1.3-.6-1.9-1 .2-.1.4-.3.5-.4 3.7 1.7 7.7 1.7 11.4 0l.5.4-1.9 1c.4.8.8 1.6 1.3 2.3a19.7 19.7 0 0 0 5.9-3c.6-4.9-.9-9-3.8-12.7ZM8.2 15.4c-1.1 0-2-1-2-2.3 0-1.3.9-2.3 2-2.3 1.1 0 2 1 2 2.3 0 1.3-.9 2.3-2 2.3Zm7.6 0c-1.1 0-2-1-2-2.3 0-1.3.9-2.3 2-2.3 1.1 0 2 1 2 2.3 0 1.3-.9 2.3-2 2.3Z"/></svg><span>Entrar com o Discord</span><b>↗</b></a><div class="auth-note"><span class="lock-dot"></span><span>Cadastro automático e conta individual segura</span></div><p id="loginError" class="login-error" role="alert" hidden></p><div class="card-rule"></div><div class="mini-info"><span>SESSÕES SEGURAS</span><span>OAUTH 2.0</span></div></div><p class="footnote">© 2026 NAPLES STUDIOS · PRIVATE CREATOR TOOLS</p></section>
-    </div>
-  </div>
-
-  <div id="billingView" hidden>
-    <div class="billing-shell">
-      <section class="billing-intro">
-        <div class="billing-logo">N ✦ NAPLES STUDIOS</div>
-        <span class="billing-kicker">✧ PREMIUM AUDIO CLOUD</span>
-        <h1>Seu estúdio.<br><em>Sem interrupções.</em></h1>
-        <p>Assine para continuar utilizando a produção de áudio 2.5x e a publicação no Roblox Open Cloud.</p>
-        <div class="billing-price">R$ 50 <small>/ 30 dias</small></div>
-        <ul class="billing-benefits"><li>Envios individuais e em lote</li><li>FFmpeg 2.5x + áudio compensado</li><li>Integração com a sua Roblox Key</li><li>Histórico e coleções pessoais</li></ul>
-      </section>
-      <section class="billing-content">
-        <h2>Ative sua assinatura</h2>
-        <p>Pagamento via Pix seguro pelo Mercado Pago. Acesso liberado após confirmação oficial do pagamento.</p>
-        <form class="billing-form" id="billingForm">
-          <label>E-mail para pagamento<input type="email" id="billingEmail" autocomplete="email" maxlength="254" required placeholder="seuemail@exemplo.com"></label>
-          <label>CPF do pagador<input type="text" id="billingCpf" inputmode="numeric" autocomplete="off" maxlength="14" required placeholder="000.000.000-00"></label>
-          <p class="billing-note">O CPF é enviado diretamente ao Mercado Pago para emissão do Pix e não é armazenado no Naples Studios.</p>
-          <button id="billingCreateBtn" class="billing-primary" type="submit">GERAR PIX · R$ 50</button>
-        </form>
-        <div id="billingPayment" hidden>
-          <strong>Seu Pix está pronto</strong>
-          <img id="billingQrImg" alt="QR Code Pix para pagamento" hidden>
-          <textarea id="billingPixCode" readonly aria-label="Código Pix Copia e Cola"></textarea>
-          <button type="button" id="billingCopyBtn" class="billing-primary">Copiar Pix</button>
-          <a id="billingTicket" target="_blank" rel="noopener noreferrer" hidden>Abrir pagamento no Mercado Pago</a>
-          <span id="billingDue"></span>
-        </div>
-        <p id="billingMessage" role="status" aria-live="polite" hidden></p>
-        <div class="billing-tools"><button id="billingCheckBtn" type="button">Já paguei · verificar</button><button id="billingLogoutBtn" type="button">Sair da conta</button></div>
-      </section>
-    </div>
-  </div>
-
-  <div id="appView" class="app-layout" hidden>
-    <aside class="sidebar">
-      <a href="#dashboard" class="brand"><div class="mark"><span>N</span></div><div class="brand-name"><strong>NAPLES</strong><small>STUDIOS</small></div></a>
-      <div class="side-section-label">WORKSPACE <span>01</span></div>
-      <nav class="main-nav" aria-label="Menu do estúdio"><a class="nav-item active" href="#dashboard"><span class="nav-glyph">▦</span>Visão geral</a><a class="nav-item" href="#studio"><span class="nav-glyph">⏫</span>Upload de áudio</a><a class="nav-item" href="#batch"><span class="nav-glyph">⇅</span>Upload em massa</a><a class="nav-item" href="#history"><span class="nav-glyph">◷</span>Histórico de assets</a><a class="nav-item" href="#collections"><span class="nav-glyph">▤</span>Coleções</a><a class="nav-item" href="#roblox-key"><span class="nav-glyph">⚿</span>Roblox Key</a><a class="nav-item" href="#monitor"><span class="nav-glyph">◉</span>Monitor de IDs</a><a class="nav-item" href="#quality"><span class="nav-glyph">♫</span>Qualidade do áudio</a></nav>
-      <div class="sidebar-bottom"><div class="engine-status"><div class="engine-light"></div><div><b>Audio Engine online</b><span>FFmpeg + Open Cloud API</span></div></div><div class="sidebar-help"><span>✦</span><p>Seu som, sem complicação.<br>Controle total do pipeline.</p></div><span class="sidebar-version">NAPLES STUDIO <span>V 11.0</span></span></div>
-    </aside>
-
-    <main class="main-content" id="dashboard">
-      <header class="topbar"><div class="topbar-location"><span>WORKSPACE</span><span class="crumb-divider">/</span><strong>OVERVIEW</strong></div><div class="topbar-right"><span class="connection"><i></i> SECURE SESSION</span><button class="round-action" id="refreshBtn" type="button" aria-label="Atualizar histórico" title="Atualizar">↻</button><div class="profile"><div id="userAvatar" class="user-avatar">N</div><div class="profile-name"><b id="userName">—</b><span id="planLabel">Discord conectado</span></div></div><button class="signout" id="logoutBtn" type="button">Sair ↗</button></div></header>
-      <div class="v7-mobile-nav"><a href="#studio">Enviar</a><a href="#batch">Em massa</a><a href="#history">Histórico</a><a href="#collections">Coleções</a><a href="#roblox-key">Roblox Key</a><a href="#monitor">Monitor</a><a href="#quality">Qualidade</a></div><div class="content-wrap">
-        <div class="intro-heading"><div><div class="kicker"><span class="kicker-line"></span>WELCOME TO NAPLES</div><h1>Seu áudio. <em>Sem limites.</em></h1><p>O estúdio de criação e publicação de assets para Roblox.</p></div><div class="date-token"><span class="token-dot"></span> NAPLES CLOUD SYSTEM</div></div>
-        <section class="hero-banner"><div class="hero-text"><span class="hero-overline">✧ STUDIO EXPERIENCE / 001</span><h2>Transforme sua música.<br><em>Eleve sua experiência.</em></h2><p>De arquivos próprios ou links autorizados para a nuvem Roblox. A disponibilidade dos links depende da plataforma de origem.</p><a href="#studio" class="hero-cta">Criar novo asset <b>↗</b></a></div><div class="hero-figure"><div class="hero-ring ring-one"></div><div class="hero-ring ring-two"></div><div class="hero-logo">N</div><div class="hero-frequency"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><span class="hero-speed">2.5<span>×</span><small>AUDIO SPEED</small></span></div></section>
-        <section class="stat-grid" aria-label="Estatísticas do estúdio"><div class="stat-card"><div class="stat-line">TOTAL DE PROJETOS <span>↗</span></div><strong id="statTotal">0</strong><p>Áudios no seu histórico</p></div><div class="stat-card"><div class="stat-line">ASSET IDs CRIADOS <span>✓</span></div><strong id="statDone">0</strong><p>IDs gerados pelo Roblox</p></div><div class="stat-card"><div class="stat-line">EM ANDAMENTO <span>⌁</span></div><strong id="statActive">0</strong><p>Processos em execução</p></div><div class="stat-card accent"><div class="stat-line">VELOCIDADE PADRÃO <span>⚡</span></div><strong>2.5<small>×</small></strong><p>Compensa PlaybackSpeed 0.4</p></div></section>
-
-        <section id="studio" class="block-section"><div class="section-heading"><div><span class="section-index">01 / CREATE ASSET</span><h2>Upload de áudio</h2><p>Importe, ajuste e publique sua próxima faixa.</p></div><span class="feature-chip"><i></i> AUTO PROCESSING ENABLED</span></div>
-          <div class="studio-grid"><form id="uploadForm" class="surface studio-form" enctype="multipart/form-data"><div class="surface-heading"><span class="heading-icon">♫</span><div><strong>Nova publicação</strong><span>Informações do arquivo de áudio</span></div></div>
-            <div class="input-group"><label for="title">NOME DO ASSET <em>*</em></label><input type="text" name="title" id="title" placeholder="Ex.: Naples Studio — Faixa Original" minlength="3" maxlength="80" required autocomplete="off"></div>
-            <div class="input-group"><label>FONTE DE ÁUDIO</label><div class="source-toggle"><button type="button" class="source-option active" data-source="url">⌁ Link de música</button><button type="button" class="source-option" data-source="file">↑ Arquivo local</button></div></div>
-            <div class="input-group" id="urlSource"><label for="sourceUrl">URL DE MÚSICA OU ARQUIVO HTTPS</label><div class="input-with-icon"><span>↗</span><input type="url" name="source_url" id="sourceUrl" placeholder="https://www.youtube.com/watch?v=..."></div><p class="hint" id="urlHint">YouTube/SoundCloud podem exigir verificação no Railway. Para suas músicas, também aceitamos links diretos de arquivos do Cloudflare R2, S3, Google Cloud Storage, Azure Blob e DigitalOcean Spaces.</p><button type="button" class="secondary-btn v7-preview-btn" id="previewBtn">♫ Ver prévia do link</button><div id="providerAccessHelp" class="naples-provider-help" role="status" aria-live="polite" hidden><div><strong>Fonte indisponível para download</strong><p id="providerAccessDetails">A plataforma não disponibilizou o arquivo.</p></div><button class="secondary-btn" id="providerLocalFallback" type="button">↑ Usar meu arquivo</button></div></div>
-            <div class="input-group" id="fileSource" hidden><label for="audioFile">ARQUIVO DE ORIGEM</label><label class="drop-zone" id="dropZone" for="audioFile"><span class="drop-symbol">↥</span><b>Clique ou arraste seu arquivo de áudio</b><small id="fileLabel">MP3, WAV, OGG, FLAC, M4A, WEBM · Até 50 MB</small></label><input type="file" name="audio_file" id="audioFile" accept="audio/*,.mp3,.wav,.ogg,.flac,.m4a,.webm,.opus,.aac"></div>
-            <div id="previewCard" class="v7-preview" hidden role="status" aria-live="polite"><span class="v7-overline">PRÉVIA DA MÍDIA</span><strong id="previewTitle">—</strong><p id="previewDetails" class="v7-muted"></p><audio id="previewPlayer" controls preload="metadata" hidden></audio><p class="v7-muted">A prévia não garante permissão de download ou aprovação pelo Roblox.</p></div>
-            <div class="naples-publish-target" id="uploadTargetNotice" role="status">Destino definido em <a href="#roblox-key">Roblox Key</a>. O envio usa automaticamente a conta autorizada.</div>
-            <div class="permission-box"><span>🔒</span><p>A chave Open Cloud é cadastrada em Roblox Key e permanece criptografada no servidor. Nunca aparece neste formulário.</p></div>
-            <label class="checkbox-line"><input type="checkbox" id="rights" required><span>Confirmo que possuo os direitos e as autorizações das plataformas para processar e publicar este áudio.</span></label>
-            <button id="submitBtn" class="submit-btn" type="submit"><span>PROCESSAR E PUBLICAR</span><b>↗</b></button><p class="form-legal">O ID fica disponível quando o Roblox concluir a operação. O Asset ID não comprova aprovação pela moderação; ela pode levar mais tempo.</p>
-          </form>
-          <div class="flow-column"><div class="surface flow-panel"><div class="flow-title"><span>PIPELINE AUTOMÁTICO</span><span class="flow-code">EXECUTION V.2</span></div><div class="steps"><div class="flow-step"><span class="step-num">01</span><div class="step-content"><b>Ingestão de mídia</b><p>Arquivo local ou YouTube / SoundCloud, se autorizado.</p></div><span class="step-check">✓</span></div><div class="flow-step"><span class="step-num">02</span><div class="step-content"><b>Audio engine</b><p>FFmpeg • MP3 estéreo • 44.1 kHz • 160 kbps.</p></div><span class="step-check">✓</span></div><div class="flow-step"><span class="step-num">03</span><div class="step-content"><b>Ajuste de velocidade</b><p>Tempo e tom acelerados em 2.5×.</p></div><span class="speed-tile">2.5×</span></div><div class="flow-step last"><span class="step-num">04</span><div class="step-content"><b>Roblox Open Cloud</b><p>Criação, consulta e registro do Asset ID.</p></div><span class="step-check">↗</span></div></div></div><div class="speed-info"><div class="speed-head"><span>⚡</span> PROCESSAMENTO AUTOMÁTICO</div><strong>2.5x speed</strong><p>Áudio acelerado para compensar quando <code>PlaybackSpeed = 0.4</code> no Roblox.</p><div class="speed-equation"><span>2.5×</span><i>×</i><span>0.4×</span><i>=</i><b>1.0×</b></div></div></div></div>
-        </section>
-
-
-        <section id="batch" class="block-section naples-batch-section">
-          <div class="section-heading"><div><span class="section-index">02 / BATCH STUDIO</span><h2>Upload em massa</h2><p>Gratuito para sua conta. Até 20 faixas por lote, com fila automática e histórico individual.</p></div><span class="naples-batch-free">✓ LIBERADO · SEM PREMIUM</span></div>
-          <div class="surface naples-batch-panel">
-            <div class="naples-batch-head"><div><span class="v7-overline">NAPLES BATCH ENGINE</span><h3>Uma fila. Várias músicas.</h3><p>O servidor processa até duas faixas por vez para manter o Railway estável.</p></div><span class="naples-batch-count">2.5× <small>SPEED + PITCH</small></span></div>
-            <form id="batchForm" class="naples-batch-form">
-              <div class="source-toggle naples-batch-toggle"><button type="button" class="source-option active" data-batch-source="links">⌁ Vários links</button><button type="button" class="source-option" data-batch-source="files">↑ Vários arquivos</button></div>
-              <div id="batchLinksBox" class="input-group"><label for="batchLinks">LINKS AUTORIZADOS OU ARQUIVOS DIRETOS · 1 POR LINHA</label><textarea id="batchLinks" rows="7" spellcheck="false" placeholder="https://soundcloud.com/artista/faixa-com-download&#10;Nome de teste | https://www.youtube.com/watch?v=ID" maxlength="45000"></textarea><p class="hint">Opcional: escreva <b>Nome do asset | link</b>. Só links permitidos pela fonte. YouTube pode exigir verificação mesmo em lote. Links diretos dos seus arquivos também são aceitos.</p></div>
-              <div id="batchFilesBox" class="input-group" hidden><label for="batchFiles">ARQUIVOS DE ÁUDIO · ATÉ 20</label><input id="batchFiles" class="naples-batch-file" type="file" multiple accept="audio/*,.mp3,.wav,.ogg,.flac,.m4a,.webm,.opus,.aac"><p id="batchFileNames" class="hint">Selecione músicas próprias. Cada arquivo é enviado separadamente.</p><p class="hint">A Vercel pode limitar o tamanho de cada requisição; arquivos maiores podem exigir upload direto ao servidor ou armazenamento próprio.</p></div>
-              <div class="naples-publish-target" id="batchTargetNotice" role="status">Destino do lote definido em <a href="#roblox-key">Roblox Key</a>.</div>
-              <label class="checkbox-line"><input type="checkbox" id="batchRights" required><span>Tenho os direitos e a permissão de publicar todas as músicas selecionadas.</span></label>
-              <button type="submit" id="batchSubmitBtn" class="submit-btn"><span>ADICIONAR LOTE À FILA</span><b>↗</b></button>
-            </form>
-            <div id="batchProgressBox" class="naples-batch-results" hidden aria-live="polite"><div class="naples-batch-progress-head"><div><span class="v7-overline">ACOMPANHAMENTO DO LOTE</span><strong id="batchProgressText">Preparando...</strong></div><a href="#history" class="secondary-btn">Ver histórico completo</a></div><div class="naples-batch-progress"><span id="batchProgressBar"></span></div><div id="batchResultRows" class="naples-batch-result-list"></div></div>
-            <p class="naples-batch-disclaimer">Sem assinatura ou créditos no Naples Studios. Custos de hospedagem e cotas das plataformas continuam existindo. Asset ID criado não significa aprovação de moderação.</p>
-          </div>
-        </section>
-
-        <section id="history" class="block-section history-block"><div class="section-heading"><div><span class="section-index">02 / ASSET LIBRARY</span><h2>Histórico de publicações</h2><p>Visualize o progresso e copie os Asset IDs.</p></div><button type="button" class="secondary-btn" id="exportBtn">↓ Exportar CSV</button></div><div class="surface history-surface"><div class="history-tools"><div class="history-count" id="tableCount">0 registros</div><div class="history-search"><input id="searchJobs" type="search" placeholder="Buscar título ou ID..."><select id="filterJobs" aria-label="Filtrar status"><option value="all">Todos os status</option><option value="concluido">Concluídos</option><option value="active">Em andamento</option><option value="pendente">Pendentes</option><option value="erro">Erros</option></select></div></div><div class="table-scroll"><table><thead><tr><th>ASSET / FONTE</th><th>DESTINO</th><th>STATUS</th><th>ROBLOX ASSET ID</th><th>CRIADO EM</th><th>AÇÕES</th></tr></thead><tbody id="jobsTable"><tr><td colspan="6" class="empty">Aguardando publicações...</td></tr></tbody></table></div></div></section>
-        <section id="roblox-key" class="block-section v7-section">
-          <div class="section-heading"><div><span class="section-index">03 / ROBLOX OPEN CLOUD</span><h2>Conectar Roblox</h2><p>Entre com Discord, cole sua API Key aqui e o ID será identificado automaticamente.</p></div></div>
-          <div class="v7-grid"><div class="surface v7-pad"><div class="v7-overline">CONEXÃO ATUAL</div><h3 id="robloxConnectionTitle">Verificando...</h3><p class="v7-muted" id="robloxConnectionDetail">O segredo da API nunca é enviado para o navegador.</p><div class="v7-key-visual"><span>🔐</span><div><b>Sua Roblox API Key</b><small>Criptografada no servidor • não compartilhada com outros usuários</small></div><span id="keyConnectedChip" class="v7-pill">—</span></div>
-              <form id="robloxKeyForm" class="naples-connect-form"><label for="robloxKeyInput" class="v7-overline">COLE SUA OPEN CLOUD API KEY</label><input id="robloxKeyInput" type="password" autocomplete="off" placeholder="Cole a API Key gerada no Creator Hub" required><label class="naples-group-option"><input type="checkbox" id="useRobloxGroup"> Publicar em um grupo (opcional)</label><div id="groupChoice" class="naples-group-choice" hidden><label for="robloxGroupId" class="v7-overline">ID DO GRUPO (SOMENTE SE NECESSÁRIO)</label><input id="robloxGroupId" type="text" inputmode="numeric" placeholder="Informe o grupo autorizado"></div><button type="submit" class="submit-btn v7-link-btn" id="saveRobloxKeyBtn">VALIDAR E CONECTAR ↗</button><div id="robloxKeyFeedback" class="v7-muted v7-feedback" role="status"></div></form>
-              <button type="button" id="disconnectRobloxBtn" class="secondary-btn" hidden>Desconectar chave pessoal</button> <button type="button" id="diagnosticsBtn" class="secondary-btn v7-diagnostics">Diagnóstico do servidor</button></div>
-          <div class="surface v7-pad"><div class="v7-overline">VALIDAÇÃO DE ACESSO</div><h3>Conferir Assets › Read</h3><p class="v7-muted">O monitor usa a chave configurada para consultar um dos seus Asset IDs. Assets › Write é usado no envio; a consulta não garante essa permissão.</p><button type="button" class="secondary-btn" id="testKeyBtn">Verificar leitura de um ID</button><div id="keyTestFeedback" class="v7-muted v7-feedback" role="status"></div></div></div>
-        </section>
-
-        <section id="quality" class="block-section v7-section">
-          <div class="section-heading"><div><span class="section-index">06 / AUDIO LAB</span><h2>Qualidade e comparação</h2><p>Compare dois arquivos com as mesmas músicas, sem enviar os arquivos a terceiros.</p></div></div>
-          <div class="surface v14-quality">
-            <div><span class="v7-overline">COMPARADOR PRIVADO</span><h3>Naples vs. referência</h3><p class="v7-muted">Selecione um MP3 produzido pelo Naples e um arquivo de referência autorizado. A análise roda somente no navegador. Para checar codec e integridade de um MP3 do histórico, clique em <strong>Auditar MP3</strong> ao lado da publicação.</p></div>
-            <div class="v14-quality-grid"><label>MP3 DO NAPLES<input id="qualityFileNaples" type="file" accept="audio/*,.mp3,.ogg,.wav,.flac"></label><label>ARQUIVO DE REFERÊNCIA<input id="qualityFileReference" type="file" accept="audio/*,.mp3,.ogg,.wav,.flac"></label></div>
-            <button type="button" class="secondary-btn" id="qualityCompareBtn">Comparar áudio localmente</button>
-            <pre id="qualityCompareResult" class="v14-audit-output" role="status" aria-live="polite">Nenhum arquivo analisado.</pre>
-            <p class="v7-muted">Importante: diferenças técnicas não explicam, por si só, uma decisão de moderação por direitos autorais.</p>
-          </div>
-        </section>
-
-        <section id="monitor" class="block-section v7-section"><div class="section-heading"><div><span class="section-index">04 / ASSET HEALTH</span><h2>Monitor de Asset IDs</h2><p>Estado de moderação informado diretamente pela API Roblox.</p></div><button id="verifyMonitorBtn" type="button" class="secondary-btn">↻ Verificar até 20</button></div>
-          <div class="v7-metrics"><div><span>APROVADOS</span><b id="modApproved">0</b></div><div><span>EM ANÁLISE</span><b id="modReviewing">0</b></div><div><span>RECUSADOS</span><b id="modRejected">0</b></div><div><span>A CONFERIR</span><b id="modUnchecked">0</b></div></div>
-          <p class="v7-muted v7-note">Apenas assets do seu histórico são consultados. "A conferir" não significa que foi recusado. O sistema não promete aprovação ou disponibilidade pública.</p>
-          <div class="surface v7-pad"><div class="v7-toolbar"><input id="searchMonitor" type="search" placeholder="Buscar título ou Asset ID" aria-label="Buscar no monitor"><select id="monitorFilter" aria-label="Filtrar moderação"><option value="all">Todos</option><option value="approved">Aprovados</option><option value="reviewing">Em análise</option><option value="rejected">Recusados</option><option value="unchecked">A conferir</option></select></div><div id="monitorList" class="v7-list"><p class="v7-muted">Nenhum Asset ID disponível.</p></div></div>
-        </section>
-
-        <section id="collections" class="block-section v7-section"><div class="section-heading"><div><span class="section-index">05 / LIBRARY</span><h2>Coleções</h2><p>Separe suas publicações por projeto, baile ou evento.</p></div></div>
-          <div class="v7-grid"><div class="surface v7-pad"><div class="v7-overline">ORGANIZAÇÃO</div><h3>Criar coleção</h3><form id="createCollectionForm" class="v7-inline"><input id="newCollectionName" minlength="2" maxlength="50" placeholder="Ex.: Baile da DZ7" required><button class="secondary-btn" type="submit">+ Criar</button></form><div id="collectionsList" class="v7-list"><p class="v7-muted">Suas coleções aparecerão aqui.</p></div></div>
-          <div class="surface v7-pad"><div class="v7-overline">GERENCIAR ASSETS</div><h3>Adicionar à coleção</h3><p class="v7-muted">Selecione uma coleção e uma música do seu histórico.</p><form id="addToCollectionForm" class="v7-stack"><label class="v7-overline" for="collectionSelect">COLEÇÃO</label><select id="collectionSelect" required></select><label class="v7-overline" for="collectionJobSelect">MÚSICA</label><select id="collectionJobSelect" required></select><button class="submit-btn v7-link-btn" type="submit">SALVAR NA COLEÇÃO ↗</button></form><div id="selectedCollectionItems" class="v7-list"></div></div></div>
-        </section>
-
-        <footer class="page-footer"><span>© 2026 NAPLES STUDIOS</span><span>MADE FOR CREATORS · PRIVATE INTERNAL TOOL</span></footer>
-      </div>
-    </main>
-  </div>
-  <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <dialog id="errorDialog" class="naples-dialog" aria-labelledby="errorDialogTitle">
-    <div class="naples-dialog-top"><strong id="errorDialogTitle">Motivo da falha</strong><button type="button" id="errorDialogClose" aria-label="Fechar">×</button></div>
-    <p id="errorDialogText"></p>
-    <p class="naples-dialog-note">O envio de arquivos próprios continua disponível. O Naples Studios não ignora verificações de conta nem permissões das plataformas.</p>
-  </dialog>
+<div aria-hidden="true" class="grain"></div>
+<div class="login-page" hidden="" id="loginView">
+<div class="login-inner">
+<section class="login-story">
+<div class="brand light"><div class="mark"><span>N</span></div><div class="brand-name"><strong>NAPLES</strong><small>STUDIOS</small></div></div>
+<div class="login-visual"><div class="orbit orbit-1"></div><div class="orbit orbit-2"></div><div class="record"><div class="record-core">N<span>✦</span></div></div><div aria-hidden="true" class="soundbars"><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b></div><span class="floating-tag">AUDIO ENGINE / 2.5X</span></div>
+<div class="login-copy"><span class="v24-login-flag">PAINEL DE ÁUDIO ROBLOX</span><span class="micro-label">TECNOLOGIA PARA CRIADORES DE BAILE</span><h1>Sua música.<br/>Seu baile.<br/><em>Seu controle.</em></h1><p>Importe suas músicas, processe áudios e organize suas publicações no Roblox com um painel exclusivo, rápido e intuitivo.</p><div class="v24-login-features"><span><b>♫</b> Música 2.5x</span><span><b>↥</b> Uploads Roblox</span><span><b>◈</b> Monitor de IDs</span></div></div>
+</section>
+<section class="login-aside"><div class="login-card"><span class="auth-mark">ENTRADA SEGURA · DISCORD OAUTH2</span><div class="tiny-symbol">♫</div><h2>Bem-vindo ao<br/><span>seu estúdio.</span></h2><p>Faça login com o Discord para acessar seu painel, acompanhar seus Asset IDs e publicar usando sua própria Roblox Key.</p><a class="discord-button" href="/auth/discord"><svg aria-hidden="true" fill="currentColor" viewbox="0 0 24 24"><path d="M19.8 5.3a19.2 19.2 0 0 0-4.8-1.5l-.6 1.3a17.5 17.5 0 0 0-5 0l-.6-1.3A19.6 19.6 0 0 0 4 5.3C1 9.6.2 13.8.6 18a19.8 19.8 0 0 0 5.9 3c.5-.7 1-1.5 1.3-2.3-.7-.3-1.3-.6-1.9-1 .2-.1.4-.3.5-.4 3.7 1.7 7.7 1.7 11.4 0l.5.4-1.9 1c.4.8.8 1.6 1.3 2.3a19.7 19.7 0 0 0 5.9-3c.6-4.9-.9-9-3.8-12.7ZM8.2 15.4c-1.1 0-2-1-2-2.3 0-1.3.9-2.3 2-2.3 1.1 0 2 1 2 2.3 0 1.3-.9 2.3-2 2.3Zm7.6 0c-1.1 0-2-1-2-2.3 0-1.3.9-2.3 2-2.3 1.1 0 2 1 2 2.3 0 1.3-.9 2.3-2 2.3Z"></path></svg><span>Entrar com Discord</span><b>↗</b></a><div class="auth-note"><span class="lock-dot"></span><span>Acesso seguro • conta individual • sem senha adicional</span></div><p class="login-error" hidden="" id="loginError" role="alert"></p><div class="card-rule"></div><div class="mini-info"><span>SESSÕES SEGURAS</span><span>OAUTH 2.0</span></div></div><p class="footnote">© 2026 NAPLES STUDIOS · PRIVATE CREATOR TOOLS</p></section>
+</div>
+</div>
+<div hidden="" id="billingView">
+<div class="billing-shell">
+<section class="billing-intro">
+<div class="billing-logo">N ✦ NAPLES STUDIOS</div>
+<span class="billing-kicker">✧ PREMIUM AUDIO CLOUD</span>
+<h1>Seu estúdio.<br/><em>Sem interrupções.</em></h1>
+<p>Assine para continuar utilizando a produção de áudio 2.5x e a publicação no Roblox Open Cloud.</p>
+<div class="billing-price">R$ 50 <small>/ 30 dias</small></div>
+<ul class="billing-benefits"><li>Envios individuais e em lote</li><li>FFmpeg 2.5x + áudio compensado</li><li>Integração com a sua Roblox Key</li><li>Histórico e coleções pessoais</li></ul>
+</section>
+<section class="billing-content">
+<h2>Ative sua assinatura</h2>
+<p>Pagamento via Pix seguro pelo Mercado Pago. Acesso liberado após confirmação oficial do pagamento.</p>
+<form class="billing-form" id="billingForm">
+<label>E-mail para pagamento<input autocomplete="email" id="billingEmail" maxlength="254" placeholder="seuemail@exemplo.com" required="" type="email"/></label>
+<label>CPF do pagador<input autocomplete="off" id="billingCpf" inputmode="numeric" maxlength="14" placeholder="000.000.000-00" required="" type="text"/></label>
+<p class="billing-note">O CPF é enviado diretamente ao Mercado Pago para emissão do Pix e não é armazenado no Naples Studios.</p>
+<button class="billing-primary" id="billingCreateBtn" type="submit">GERAR PIX · R$ 50</button>
+</form>
+<div hidden="" id="billingPayment">
+<strong>Seu Pix está pronto</strong>
+<img alt="QR Code Pix para pagamento" hidden="" id="billingQrImg"/>
+<textarea aria-label="Código Pix Copia e Cola" id="billingPixCode" readonly=""></textarea>
+<button class="billing-primary" id="billingCopyBtn" type="button">Copiar Pix</button>
+<a hidden="" id="billingTicket" rel="noopener noreferrer" target="_blank">Abrir pagamento no Mercado Pago</a>
+<span id="billingDue"></span>
+</div>
+<p aria-live="polite" hidden="" id="billingMessage" role="status"></p>
+<div class="billing-tools"><button id="billingCheckBtn" type="button">Já paguei · verificar</button><button id="billingLogoutBtn" type="button">Sair da conta</button></div>
+</section>
+</div>
+</div>
+<div class="app-layout" hidden="" id="appView">
+<aside class="sidebar">
+<a class="brand" href="#dashboard"><div class="mark"><span>N</span></div><div class="brand-name"><strong>NAPLES</strong><small>STUDIOS</small></div></a>
+<div class="side-section-label">MENU PRINCIPAL</div>
+<nav aria-label="Menu do estúdio" class="main-nav"><a class="nav-item active" href="#dashboard"><span class="nav-glyph">⌂</span>Visão geral</a><a class="nav-item" href="#studio"><span class="nav-glyph">♬</span>Enviar música</a><a class="nav-item" href="#batch"><span class="nav-glyph">≡</span>Upload em massa</a><a class="nav-item" href="#images"><span class="nav-glyph">▧</span>Upload de imagem</a><a class="nav-item" href="#history"><span class="nav-glyph">◷</span>Histórico</a><a class="nav-item" href="#collections"><span class="nav-glyph">▱</span>Coleções</a><a class="nav-item" href="#roblox-key"><span class="nav-glyph">⚿</span>Roblox Key</a><a class="nav-item" href="#monitor"><span class="nav-glyph">◎</span>Monitor de IDs</a><a class="nav-item" href="#quality"><span class="nav-glyph">♫</span>Qualidade do áudio</a></nav>
+<div class="sidebar-bottom"><div class="engine-status"><div class="engine-light"></div><div><b>Audio Engine online</b><span>FFmpeg + Open Cloud API</span></div></div><div class="sidebar-help"><span>✦</span><p>Seu som, sem complicação.<br/>Controle total do pipeline.</p></div><span class="sidebar-version">NAPLES STUDIO <span>V 11.0</span></span></div>
+</aside>
+<main class="main-content" id="dashboard">
+<header class="topbar"><div class="topbar-location"><span class="v24-pulse">✦</span> <strong>PAINEL NAPLES STUDIOS</strong></div><div class="topbar-right"><span class="connection"><i></i> SECURE SESSION</span><button aria-label="Atualizar histórico" class="round-action" id="refreshBtn" title="Atualizar" type="button">↻</button><div class="profile"><div class="user-avatar" id="userAvatar">N</div><div class="profile-name"><b id="userName">—</b><span id="planLabel">Discord conectado</span></div></div><button class="signout" id="logoutBtn" type="button">Sair ↗</button></div></header>
+<div class="v7-mobile-nav"><a href="#dashboard">Visão geral</a><a href="#studio">Enviar música</a><a href="#batch">Upload em massa</a><a href="#images">Upload de imagem</a><a href="#history">Histórico</a><a href="#collections">Coleções</a><a href="#roblox-key">Roblox Key</a><a href="#monitor">Monitor de IDs</a><a href="#quality">Qualidade do áudio</a></div><div class="content-wrap">
+<section class="v24-page" data-v24-page="dashboard" id="overview">
+<div class="v24-overview-heading"><span class="v24-kicker">✦ PAINEL NAPLES STUDIOS</span><h1>Seu painel de áudio para Roblox</h1><p>Gerencie uploads, coleções, IDs e outros recursos em um só lugar.</p></div>
+<div class="v24-metrics">
+<article class="v24-metric"><div><span>Plano atual</span><strong id="v24PlanName">Verificando</strong><p id="v24PlanDetail">Seu acesso Naples Studios</p></div><b>♛</b></article>
+<article class="v24-metric"><div><span>Uploads</span><strong id="statTotal">0</strong><p>Total de áudios no histórico</p></div><b>♫</b></article>
+<article class="v24-metric"><div><span>IDs gerados</span><strong id="statDone">0</strong><p><span id="statActive">0</span> em andamento</p></div><b>◈</b></article>
+<article class="v24-metric"><div><span>Roblox Key</span><strong id="v24KeyStatus">Verificando</strong><p>Destino configurado</p></div><b>⚿</b></article>
+</div>
+<div class="v24-panel v24-actions"><h2>Ações rápidas</h2><p>Acesse as principais funções do sistema.</p><div class="v24-action-grid"><a href="#studio">↥   Enviar música</a><a href="#batch">▤   Upload em massa</a><a href="#images">▧   Upload de imagem</a><a href="#history">◷   Ver histórico</a></div></div>
+<div class="v24-info"><div class="v24-info-icon">ⓘ</div><div><h3>Nova organização do sistema</h3><p>Uma página para cada função, com navegação mais limpa e sem confirmações repetidas em caixas de seleção. O processamento de áudio continua igual.</p></div><div class="v24-info-glyph">◇</div></div>
+<div class="v24-panel v24-recent"><div class="v24-recent-head"><div><h2>Últimos uploads</h2><p>Acompanhe suas publicações recentes.</p></div><a href="#history">Ver histórico →</a></div><div class="v24-recent-list" id="v24RecentJobs"><p>Carregando publicações...</p></div></div>
+</section>
+<section class="block-section" data-v24-page="studio" hidden="" id="studio"><div class="section-heading"><div><span class="section-index">01 / CREATE ASSET</span><h2>Upload de áudio</h2><p>Importe, ajuste e publique sua próxima faixa.</p></div><span class="feature-chip"><i></i> AUTO PROCESSING ENABLED</span></div>
+<div class="studio-grid"><form class="surface studio-form" enctype="multipart/form-data" id="uploadForm"><div class="surface-heading"><span class="heading-icon">♫</span><div><strong>Nova publicação</strong><span>Informações do arquivo de áudio</span></div></div>
+<div class="input-group"><label for="title">NOME DO ASSET <em>*</em></label><input autocomplete="off" id="title" maxlength="80" minlength="3" name="title" placeholder="Ex.: Naples Studio — Faixa Original" required="" type="text"/></div>
+<div class="input-group"><label>FONTE DE ÁUDIO</label><div class="source-toggle"><button class="source-option active" data-source="url" type="button">⌁ Link de música</button><button class="source-option" data-source="file" type="button">↑ Arquivo local</button></div></div>
+<div class="input-group" id="urlSource"><label for="sourceUrl">URL DE MÚSICA OU ARQUIVO HTTPS</label><div class="input-with-icon"><span>↗</span><input id="sourceUrl" name="source_url" placeholder="https://www.youtube.com/watch?v=..." type="url"/></div><p class="hint" id="urlHint">YouTube/SoundCloud podem exigir verificação no Railway. Para suas músicas, também aceitamos links diretos de arquivos do Cloudflare R2, S3, Google Cloud Storage, Azure Blob e DigitalOcean Spaces.</p><button class="secondary-btn v7-preview-btn" id="previewBtn" type="button">♫ Ver prévia do link</button><div aria-live="polite" class="naples-provider-help" hidden="" id="providerAccessHelp" role="status"><div><strong>Fonte indisponível para download</strong><p id="providerAccessDetails">A plataforma não disponibilizou o arquivo.</p></div><button class="secondary-btn" id="providerLocalFallback" type="button">↑ Usar meu arquivo</button></div></div>
+<div class="input-group" hidden="" id="fileSource"><label for="audioFile">ARQUIVO DE ORIGEM</label><label class="drop-zone" for="audioFile" id="dropZone"><span class="drop-symbol">↥</span><b>Clique ou arraste seu arquivo de áudio</b><small id="fileLabel">MP3, WAV, OGG, FLAC, M4A, WEBM · Até 50 MB</small></label><input accept="audio/*,.mp3,.wav,.ogg,.flac,.m4a,.webm,.opus,.aac" id="audioFile" name="audio_file" type="file"/></div>
+<div aria-live="polite" class="v7-preview" hidden="" id="previewCard" role="status"><span class="v7-overline">PRÉVIA DA MÍDIA</span><strong id="previewTitle">—</strong><p class="v7-muted" id="previewDetails"></p><audio controls="" hidden="" id="previewPlayer" preload="metadata"></audio><p class="v7-muted">A prévia não garante permissão de download ou aprovação pelo Roblox.</p></div>
+<div class="naples-publish-target" id="uploadTargetNotice" role="status">Destino definido em <a href="#roblox-key">Roblox Key</a>. O envio usa automaticamente a conta autorizada.</div>
+<div class="permission-box"><span>🔒</span><p>A chave Open Cloud é cadastrada em Roblox Key e permanece criptografada no servidor. Nunca aparece neste formulário.</p></div>
+<p class="v24-terms-note">Ao publicar, você declara possuir as permissões necessárias para utilizar e publicar este conteúdo no Roblox.</p>
+<button class="submit-btn" id="submitBtn" type="submit"><span>PROCESSAR E PUBLICAR</span><b>↗</b></button><p class="form-legal">O ID fica disponível quando o Roblox concluir a operação. O Asset ID não comprova aprovação pela moderação; ela pode levar mais tempo.</p>
+</form>
+<div class="flow-column"><div class="surface flow-panel"><div class="flow-title"><span>PIPELINE AUTOMÁTICO</span><span class="flow-code">EXECUTION V.2</span></div><div class="steps"><div class="flow-step"><span class="step-num">01</span><div class="step-content"><b>Ingestão de mídia</b><p>Arquivo local ou YouTube / SoundCloud, se autorizado.</p></div><span class="step-check">✓</span></div><div class="flow-step"><span class="step-num">02</span><div class="step-content"><b>Audio engine</b><p>FFmpeg • MP3 estéreo • 44.1 kHz • 160 kbps.</p></div><span class="step-check">✓</span></div><div class="flow-step"><span class="step-num">03</span><div class="step-content"><b>Ajuste de velocidade</b><p>Tempo e tom acelerados em 2.5×.</p></div><span class="speed-tile">2.5×</span></div><div class="flow-step last"><span class="step-num">04</span><div class="step-content"><b>Roblox Open Cloud</b><p>Criação, consulta e registro do Asset ID.</p></div><span class="step-check">↗</span></div></div></div><div class="speed-info"><div class="speed-head"><span>⚡</span> PROCESSAMENTO AUTOMÁTICO</div><strong>2.5x speed</strong><p>Áudio acelerado para compensar quando <code>PlaybackSpeed = 0.4</code> no Roblox.</p><div class="speed-equation"><span>2.5×</span><i>×</i><span>0.4×</span><i>=</i><b>1.0×</b></div></div></div></div>
+</section>
+<section class="block-section naples-batch-section" data-v24-page="batch" hidden="" id="batch">
+<div class="section-heading"><div><span class="section-index">02 / BATCH STUDIO</span><h2>Upload em massa</h2><p>Gratuito para sua conta. Até 20 faixas por lote, com fila automática e histórico individual.</p></div><span class="naples-batch-free">✓ LIBERADO · SEM PREMIUM</span></div>
+<div class="surface naples-batch-panel">
+<div class="naples-batch-head"><div><span class="v7-overline">NAPLES BATCH ENGINE</span><h3>Uma fila. Várias músicas.</h3><p>O servidor processa até duas faixas por vez para manter o Railway estável.</p></div><span class="naples-batch-count">2.5× <small>SPEED + PITCH</small></span></div>
+<form class="naples-batch-form" id="batchForm">
+<div class="source-toggle naples-batch-toggle"><button class="source-option active" data-batch-source="links" type="button">⌁ Vários links</button><button class="source-option" data-batch-source="files" type="button">↑ Vários arquivos</button></div>
+<div class="input-group" id="batchLinksBox"><label for="batchLinks">LINKS AUTORIZADOS OU ARQUIVOS DIRETOS · 1 POR LINHA</label><textarea id="batchLinks" maxlength="45000" placeholder="https://soundcloud.com/artista/faixa-com-download
+Nome de teste | https://www.youtube.com/watch?v=ID" rows="7" spellcheck="false"></textarea><p class="hint">Opcional: escreva <b>Nome do asset | link</b>. Só links permitidos pela fonte. YouTube pode exigir verificação mesmo em lote. Links diretos dos seus arquivos também são aceitos.</p></div>
+<div class="input-group" hidden="" id="batchFilesBox"><label for="batchFiles">ARQUIVOS DE ÁUDIO · ATÉ 20</label><input accept="audio/*,.mp3,.wav,.ogg,.flac,.m4a,.webm,.opus,.aac" class="naples-batch-file" id="batchFiles" multiple="" type="file"/><p class="hint" id="batchFileNames">Selecione músicas próprias. Cada arquivo é enviado separadamente.</p><p class="hint">A Vercel pode limitar o tamanho de cada requisição; arquivos maiores podem exigir upload direto ao servidor ou armazenamento próprio.</p></div>
+<div class="naples-publish-target" id="batchTargetNotice" role="status">Destino do lote definido em <a href="#roblox-key">Roblox Key</a>.</div>
+<p class="v24-terms-note">Ao publicar, você declara possuir as permissões necessárias para utilizar e publicar este conteúdo no Roblox.</p>
+<button class="submit-btn" id="batchSubmitBtn" type="submit"><span>ADICIONAR LOTE À FILA</span><b>↗</b></button>
+</form>
+<div aria-live="polite" class="naples-batch-results" hidden="" id="batchProgressBox"><div class="naples-batch-progress-head"><div><span class="v7-overline">ACOMPANHAMENTO DO LOTE</span><strong id="batchProgressText">Preparando...</strong></div><a class="secondary-btn" href="#history">Ver histórico completo</a></div><div class="naples-batch-progress"><span id="batchProgressBar"></span></div><div class="naples-batch-result-list" id="batchResultRows"></div></div>
+<p class="naples-batch-disclaimer">Sem assinatura ou créditos no Naples Studios. Custos de hospedagem e cotas das plataformas continuam existindo. Asset ID criado não significa aprovação de moderação.</p>
+</div>
+</section>
+<section class="block-section history-block" data-v24-page="history" hidden="" id="history"><div class="section-heading"><div><span class="section-index">02 / ASSET LIBRARY</span><h2>Histórico de publicações</h2><p>Visualize o progresso e copie os Asset IDs.</p></div><button class="secondary-btn" id="exportBtn" type="button">↓ Exportar CSV</button></div><div class="surface history-surface"><div class="history-tools"><div class="history-count" id="tableCount">0 registros</div><div class="history-search"><input id="searchJobs" placeholder="Buscar título ou ID..." type="search"/><select aria-label="Filtrar status" id="filterJobs"><option value="all">Todos os status</option><option value="concluido">Concluídos</option><option value="active">Em andamento</option><option value="pendente">Pendentes</option><option value="erro">Erros</option></select></div></div><div class="table-scroll"><table><thead><tr><th>ASSET / FONTE</th><th>DESTINO</th><th>STATUS</th><th>ROBLOX ASSET ID</th><th>CRIADO EM</th><th>AÇÕES</th></tr></thead><tbody id="jobsTable"><tr><td class="empty" colspan="6">Aguardando publicações...</td></tr></tbody></table></div></div></section>
+<section class="block-section v7-section" data-v24-page="roblox-key" hidden="" id="roblox-key">
+<div class="section-heading"><div><span class="section-index">03 / ROBLOX OPEN CLOUD</span><h2>Conectar Roblox</h2><p>Entre com Discord, cole sua API Key aqui e o ID será identificado automaticamente.</p></div></div>
+<div class="v7-grid"><div class="surface v7-pad"><div class="v7-overline">CONEXÃO ATUAL</div><h3 id="robloxConnectionTitle">Verificando...</h3><p class="v7-muted" id="robloxConnectionDetail">O segredo da API nunca é enviado para o navegador.</p><div class="v7-key-visual"><span>🔐</span><div><b>Sua Roblox API Key</b><small>Criptografada no servidor • não compartilhada com outros usuários</small></div><span class="v7-pill" id="keyConnectedChip">—</span></div>
+<form class="naples-connect-form" id="robloxKeyForm"><label class="v7-overline" for="robloxKeyInput">COLE SUA OPEN CLOUD API KEY</label><input autocomplete="off" id="robloxKeyInput" placeholder="Cole a API Key gerada no Creator Hub" required="" type="password"/><label class="naples-group-option"><input id="useRobloxGroup" type="checkbox"/> Publicar em um grupo (opcional)</label><div class="naples-group-choice" hidden="" id="groupChoice"><label class="v7-overline" for="robloxGroupId">ID DO GRUPO (SOMENTE SE NECESSÁRIO)</label><input id="robloxGroupId" inputmode="numeric" placeholder="Informe o grupo autorizado" type="text"/></div><button class="submit-btn v7-link-btn" id="saveRobloxKeyBtn" type="submit">VALIDAR E CONECTAR ↗</button><div class="v7-muted v7-feedback" id="robloxKeyFeedback" role="status"></div></form>
+<button class="secondary-btn" hidden="" id="disconnectRobloxBtn" type="button">Desconectar chave pessoal</button> <button class="secondary-btn v7-diagnostics" id="diagnosticsBtn" type="button">Diagnóstico do servidor</button></div>
+<div class="surface v7-pad"><div class="v7-overline">VALIDAÇÃO DE ACESSO</div><h3>Conferir Assets › Read</h3><p class="v7-muted">O monitor usa a chave configurada para consultar um dos seus Asset IDs. Assets › Write é usado no envio; a consulta não garante essa permissão.</p><button class="secondary-btn" id="testKeyBtn" type="button">Verificar leitura de um ID</button><div class="v7-muted v7-feedback" id="keyTestFeedback" role="status"></div></div></div>
+</section>
+<section class="block-section v7-section" data-v24-page="quality" hidden="" id="quality">
+<div class="section-heading"><div><span class="section-index">06 / AUDIO LAB</span><h2>Qualidade e comparação</h2><p>Compare dois arquivos com as mesmas músicas, sem enviar os arquivos a terceiros.</p></div></div>
+<div class="surface v14-quality">
+<div><span class="v7-overline">COMPARADOR PRIVADO</span><h3>Naples vs. referência</h3><p class="v7-muted">Selecione um MP3 produzido pelo Naples e um arquivo de referência autorizado. A análise roda somente no navegador. Para checar codec e integridade de um MP3 do histórico, clique em <strong>Auditar MP3</strong> ao lado da publicação.</p></div>
+<div class="v14-quality-grid"><label>MP3 DO NAPLES<input accept="audio/*,.mp3,.ogg,.wav,.flac" id="qualityFileNaples" type="file"/></label><label>ARQUIVO DE REFERÊNCIA<input accept="audio/*,.mp3,.ogg,.wav,.flac" id="qualityFileReference" type="file"/></label></div>
+<button class="secondary-btn" id="qualityCompareBtn" type="button">Comparar áudio localmente</button>
+<pre aria-live="polite" class="v14-audit-output" id="qualityCompareResult" role="status">Nenhum arquivo analisado.</pre>
+<p class="v7-muted">Importante: diferenças técnicas não explicam, por si só, uma decisão de moderação por direitos autorais.</p>
+</div>
+</section>
+<section class="block-section v7-section" data-v24-page="monitor" hidden="" id="monitor"><div class="section-heading"><div><span class="section-index">04 / ASSET HEALTH</span><h2>Monitor de Asset IDs</h2><p>Estado de moderação informado diretamente pela API Roblox.</p></div><button class="secondary-btn" id="verifyMonitorBtn" type="button">↻ Verificar até 20</button></div>
+<div class="v7-metrics"><div><span>APROVADOS</span><b id="modApproved">0</b></div><div><span>EM ANÁLISE</span><b id="modReviewing">0</b></div><div><span>RECUSADOS</span><b id="modRejected">0</b></div><div><span>A CONFERIR</span><b id="modUnchecked">0</b></div></div>
+<p class="v7-muted v7-note">Apenas assets do seu histórico são consultados. "A conferir" não significa que foi recusado. O sistema não promete aprovação ou disponibilidade pública.</p>
+<div class="surface v7-pad"><div class="v7-toolbar"><input aria-label="Buscar no monitor" id="searchMonitor" placeholder="Buscar título ou Asset ID" type="search"/><select aria-label="Filtrar moderação" id="monitorFilter"><option value="all">Todos</option><option value="approved">Aprovados</option><option value="reviewing">Em análise</option><option value="rejected">Recusados</option><option value="unchecked">A conferir</option></select></div><div class="v7-list" id="monitorList"><p class="v7-muted">Nenhum Asset ID disponível.</p></div></div>
+</section>
+<section class="block-section v7-section" data-v24-page="collections" hidden="" id="collections"><div class="section-heading"><div><span class="section-index">05 / LIBRARY</span><h2>Coleções</h2><p>Separe suas publicações por projeto, baile ou evento.</p></div></div>
+<div class="v7-grid"><div class="surface v7-pad"><div class="v7-overline">ORGANIZAÇÃO</div><h3>Criar coleção</h3><form class="v7-inline" id="createCollectionForm"><input id="newCollectionName" maxlength="50" minlength="2" placeholder="Ex.: Baile da DZ7" required=""/><button class="secondary-btn" type="submit">+ Criar</button></form><div class="v7-list" id="collectionsList"><p class="v7-muted">Suas coleções aparecerão aqui.</p></div></div>
+<div class="surface v7-pad"><div class="v7-overline">GERENCIAR ASSETS</div><h3>Adicionar à coleção</h3><p class="v7-muted">Selecione uma coleção e uma música do seu histórico.</p><form class="v7-stack" id="addToCollectionForm"><label class="v7-overline" for="collectionSelect">COLEÇÃO</label><select id="collectionSelect" required=""></select><label class="v7-overline" for="collectionJobSelect">MÚSICA</label><select id="collectionJobSelect" required=""></select><button class="submit-btn v7-link-btn" type="submit">SALVAR NA COLEÇÃO ↗</button></form><div class="v7-list" id="selectedCollectionItems"></div></div></div>
+</section>
+<footer class="page-footer"><span>© 2026 NAPLES STUDIOS</span><span>MADE FOR CREATORS · PRIVATE INTERNAL TOOL</span></footer>
+<section class="block-section v24-image-page" data-v24-page="images" hidden="" id="images">
+<div class="section-heading"><div><span class="section-index">NOVO / IMAGENS</span><h2>Upload de imagem</h2><p>Envie PNG e JPEG diretamente para sua conta Roblox pela Open Cloud.</p></div><span class="feature-chip">▧ DECAL &amp; IMAGE</span></div>
+<div class="v24-image-layout">
+<form class="surface studio-form" enctype="multipart/form-data" id="imageUploadForm">
+<div class="surface-heading"><span class="heading-icon">▧</span><div><strong>Publicar imagem</strong><span>Utiliza sua Roblox Key cadastrada, sem novo cadastro</span></div></div>
+<div class="input-group"><label for="imageTitle">NOME DA IMAGEM</label><input id="imageTitle" maxlength="80" minlength="3" placeholder="Ex.: Banner do meu baile" required="" type="text"/></div>
+<div class="input-group"><label for="imageType">TIPO DE ASSET</label><select id="imageType"><option value="Decal">Decal (recomendado para o Roblox Studio)</option><option value="Image">Imagem (Image)</option></select></div>
+<div class="input-group"><label for="imageFile">ARQUIVO DE IMAGEM</label><label class="v24-image-drop" for="imageFile"><span>▧</span><strong>Escolher imagem PNG ou JPG</strong><small id="imageFilename">Até 10 MB · menor que 8000×8000 pixels</small></label><input accept="image/png,image/jpeg,.png,.jpg,.jpeg" id="imageFile" required="" type="file"/></div>
+<div class="v24-image-preview" hidden="" id="imagePreviewBox"><img alt="Prévia da imagem selecionada" id="imagePreview"/></div>
+<p class="v24-terms-note">Publique somente imagens que você pode utilizar. O Roblox pode realizar moderação após o envio.</p>
+<button class="submit-btn" id="imageSubmit" type="submit"><span>ENVIAR IMAGEM AO ROBLOX</span><b>↗</b></button>
+<p aria-live="polite" class="form-legal" id="imageUploadFeedback" role="status">O Asset ID será exibido após o processamento pelo Roblox.</p>
+</form>
+<div class="v24-image-help"><div class="surface flow-panel"><div class="flow-title">COMO FUNCIONA</div><div class="steps"><div class="flow-step"><span class="step-num">01</span><div class="step-content"><b>Selecione um arquivo</b><p>PNG transparente ou JPG, até 10 MB.</p></div></div><div class="flow-step"><span class="step-num">02</span><div class="step-content"><b>Envio pela Open Cloud</b><p>Usa seu destino pessoal definido em Roblox Key.</p></div></div><div class="flow-step last"><span class="step-num">03</span><div class="step-content"><b>Copie o Asset ID</b><p>Use rbxassetid://SEU_ID no Roblox Studio, quando disponível.</p></div></div></div></div></div>
+</div>
+<div class="v24-panel v24-image-history"><div class="v24-recent-head"><div><h2>Histórico de imagens</h2><p>Assets publicados pela sua conta.</p></div><button class="secondary-btn" id="imageRefresh" type="button">↻ Atualizar</button></div><div class="v24-image-job-list" id="imageJobList"><p class="v7-muted">Nenhuma imagem enviada ainda.</p></div></div>
+</section></div>
+</main>
+</div>
+<div aria-live="polite" class="toast" id="toast" role="status"></div>
+<dialog aria-labelledby="errorDialogTitle" class="naples-dialog" id="errorDialog">
+<div class="naples-dialog-top"><strong id="errorDialogTitle">Motivo da falha</strong><button aria-label="Fechar" id="errorDialogClose" type="button">×</button></div>
+<p id="errorDialogText"></p>
+<p class="naples-dialog-note">O envio de arquivos próprios continua disponível. O Naples Studios não ignora verificações de conta nem permissões das plataformas.</p>
+</dialog>
 </body>
 </html>
