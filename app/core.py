@@ -10,6 +10,9 @@ from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 
 import httpx
+from curl_cffi import CurlMime
+from curl_cffi.requests import Session as CurlSession
+from curl_cffi.requests.exceptions import RequestException as CurlError
 from . import provider_guard
 
 CREATE_URL = 'https://apis.roblox.com/assets/v1/assets'
@@ -521,23 +524,44 @@ def create_roblox_asset(mp3: Path, title: str, creator_id: str, creator_type: st
     }
     owns_client = client is None
     if owns_client:
-        client = httpx.Client(timeout=httpx.Timeout(150.0, connect=20.0), follow_redirects=False)
+        client = CurlSession(timeout=150, http_version='v1', trust_env=False, allow_redirects=False)
     try:
-        with mp3.open('rb') as stream:
-            # A API aceita string JSON no campo multipart "request" e arquivo em "fileContent".
-            resp = client.post(
-                CREATE_URL,
-                headers={'x-api-key': api_key},
-                data={'request': json.dumps(payload, ensure_ascii=False)},
-                files={'fileContent': (mp3.name, stream, content_type)}
-            )
+        if owns_client:
+            form = CurlMime()
+            try:
+                form.addpart(
+                    name='request',
+                    data=json.dumps(payload, ensure_ascii=False).encode('utf-8')
+                )
+                form.addpart(
+                    name='fileContent',
+                    filename=mp3.name,
+                    content_type=content_type,
+                    local_path=str(mp3)
+                )
+                resp = client.post(
+                    CREATE_URL,
+                    headers={'x-api-key': api_key},
+                    multipart=form
+                )
+            finally:
+                form.close()
+        else:
+            with mp3.open('rb') as stream:
+                # A API aceita string JSON no campo multipart "request" e arquivo em "fileContent".
+                resp = client.post(
+                    CREATE_URL,
+                    headers={'x-api-key': api_key},
+                    data={'request': json.dumps(payload, ensure_ascii=False)},
+                    files={'fileContent': (mp3.name, stream, content_type)}
+                )
         ensure_http_ok(resp)
         obj = resp.json()
         operation = obj.get('path') or obj.get('name') or ''
         if not isinstance(operation, str) or not re.fullmatch(r'operations/[A-Za-z0-9_\-]+', operation):
             raise ProcessingError('O Roblox não retornou um ID de operação válido.')
         return operation
-    except httpx.RequestError as e:
+    except (httpx.RequestError, CurlError) as e:
         raise ProcessingError(f'Falha de comunicação com Roblox: {type(e).__name__}.')
     finally:
         if owns_client:
@@ -548,12 +572,12 @@ def poll_roblox_asset(operation: str, api_key: str, client=None, tries=30, inter
         raise ProcessingError('ID da operação inválido.')
     owns_client = client is None
     if owns_client:
-        client = httpx.Client(timeout=httpx.Timeout(30.0, connect=15.0), follow_redirects=False)
+        client = CurlSession(timeout=30, http_version='v1', trust_env=False, allow_redirects=False)
     try:
         for attempt in range(tries):
             try:
                 response = client.get(OPERATIONS_URL + operation.split('/', 1)[1], headers={'x-api-key': api_key})
-            except httpx.RequestError:
+            except (httpx.RequestError, CurlError):
                 if attempt == tries-1:
                     raise ProcessingError('Não foi possível confirmar o upload no Roblox.')
                 time.sleep(interval)

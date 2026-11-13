@@ -7,6 +7,8 @@ com escopo asset/write. Nunca serializar ou registrar o valor da API Key.
 from __future__ import annotations
 import re
 import httpx
+from curl_cffi.requests import Session as CurlSession
+from curl_cffi.requests.exceptions import RequestException as CurlError
 
 URL = 'https://apis.roblox.com/api-keys/v1/introspect'
 ID_PATTERN = re.compile(r'^[1-9][0-9]{0,19}$')
@@ -84,11 +86,11 @@ def inspect_key(api_key: str, *, client=None):
         raise KeyInspectionError('Cole uma API Key Roblox completa e válida.')
     own_client = client is None
     if own_client:
-        client = httpx.Client(timeout=httpx.Timeout(12, connect=5), follow_redirects=False)
+        client = CurlSession(timeout=12, http_version='v1', trust_env=False, allow_redirects=False)
     try:
         try:
             r=client.post(URL, json={'apiKey':api_key.strip()}, headers={'Accept':'application/json'})
-        except (httpx.TimeoutException, httpx.TransportError) as exc:
+        except (httpx.TimeoutException, httpx.TransportError, CurlError) as exc:
             raise KeyInspectionError('Roblox indisponível para validar a chave neste momento.') from exc
         if r.status_code in (401,403):
             raise KeyInspectionError('A chave foi recusada pelo Roblox. Verifique permissões e restrições de IP do Railway.')

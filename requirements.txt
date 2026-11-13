@@ -8,3 +8,4 @@ httpx==0.28.1
 # Node 26 LTS é explicitamente ativado em app/core.py (--js-runtimes node).
 yt-dlp[default]==2026.10.26
 cryptography==50.0.2
+curl_cffi==0.17.0
