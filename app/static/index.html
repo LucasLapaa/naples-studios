@@ -12,7 +12,8 @@
 <script defer="" src="/static/billing.js"></script>
 <script defer="" src="/static/app.js?v=241"></script>
 <link href="/static/studio_v24.css?v=241" rel="stylesheet"/>
-<script defer="" src="/static/studio_v24.js?v=241"></script><link href="/static/login_v24.css?v=242" rel="stylesheet"/></head>
+<script defer="" src="/static/studio_v24.js?v=241"></script>
+<link href="/static/admin_v25.css?v=250" rel="stylesheet"/><script defer src="/static/admin_v25.js?v=250"></script><link href="/static/login_v24.css?v=242" rel="stylesheet"/></head>
 <body>
 <div aria-hidden="true" class="grain"></div>
 <div class="login-page" hidden="" id="loginView"><div class="login-inner">
@@ -30,7 +31,7 @@
 <section aria-labelledby="naplesSignInTitle" class="login-aside">
 <div class="login-card">
 <span class="auth-mark">BEM-VINDO AO SEU ESTÚDIO</span>
-<h2 id="naplesSignInTitle">LOGIN</h2>
+<h2 id="naplesSignInTitle">SIGN IN</h2>
 <p>Entre com sua conta para continuar.</p>
 <a aria-label="Entrar com Discord" class="discord-button" href="/auth/discord">
 <svg aria-hidden="true" fill="currentColor" viewbox="0 0 24 24"><path d="M19.8 5.3a19.2 19.2 0 0 0-4.8-1.5l-.6 1.3a17.5 17.5 0 0 0-5 0l-.6-1.3A19.6 19.6 0 0 0 4 5.3C1 9.6.2 13.8.6 18a19.8 19.8 0 0 0 5.9 3c.5-.7 1-1.5 1.3-2.3-.7-.3-1.3-.6-1.9-1 .2-.1.4-.3.5-.4 3.7 1.7 7.7 1.7 11.4 0l.5.4-1.9 1c.4.8.8 1.6 1.3 2.3a19.7 19.7 0 0 0 5.9-3c.6-4.9-.9-9-3.8-12.7ZM8.2 15.4c-1.1 0-2-1-2-2.3 0-1.3.9-2.3 2-2.3 1.1 0 2 1 2 2.3 0 1.3-.9 2.3-2 2.3Zm7.6 0c-1.1 0-2-1-2-2.3 0-1.3.9-2.3 2-2.3 1.1 0 2 1 2 2.3 0 1.3-.9 2.3-2 2.3Z"></path></svg>
@@ -80,12 +81,12 @@
 <aside class="sidebar">
 <a class="brand" href="#dashboard"><div class="mark"><span>N</span></div><div class="brand-name"><strong>NAPLES</strong><small>STUDIOS</small></div></a>
 <div class="side-section-label">MENU PRINCIPAL</div>
-<nav aria-label="Menu do estúdio" class="main-nav"><a class="nav-item active" href="#dashboard"><span class="nav-glyph">⌂</span>Visão geral</a><a class="nav-item" href="#studio"><span class="nav-glyph">♬</span>Enviar música</a><a class="nav-item" href="#batch"><span class="nav-glyph">≡</span>Upload em massa</a><a class="nav-item" href="#images"><span class="nav-glyph">▧</span>Upload de imagem</a><a class="nav-item" href="#history"><span class="nav-glyph">◷</span>Histórico</a><a class="nav-item" href="#collections"><span class="nav-glyph">▱</span>Coleções</a><a class="nav-item" href="#roblox-key"><span class="nav-glyph">⚿</span>Roblox Key</a><a class="nav-item" href="#monitor"><span class="nav-glyph">◎</span>Monitor de IDs</a><a class="nav-item" href="#quality"><span class="nav-glyph">♫</span>Qualidade do áudio</a></nav>
+<nav aria-label="Menu do estúdio" class="main-nav"><a class="nav-item active" href="#dashboard"><span class="nav-glyph">⌂</span>Visão geral</a><a class="nav-item" href="#studio"><span class="nav-glyph">♬</span>Enviar música</a><a class="nav-item" href="#batch"><span class="nav-glyph">≡</span>Upload em massa</a><a class="nav-item" href="#images"><span class="nav-glyph">▧</span>Upload de imagem</a><a class="nav-item" href="#history"><span class="nav-glyph">◷</span>Histórico</a><a class="nav-item" href="#collections"><span class="nav-glyph">▱</span>Coleções</a><a class="nav-item" href="#roblox-key"><span class="nav-glyph">⚿</span>Roblox Key</a><a class="nav-item" href="#monitor"><span class="nav-glyph">◎</span>Monitor de IDs</a><a class="nav-item" href="#quality"><span class="nav-glyph">♫</span>Qualidade do áudio</a><a class="nav-item" href="#admin-users" data-admin-nav hidden><span class="nav-glyph">⚙</span>Administração</a></nav>
 <div class="sidebar-bottom"><div class="engine-status"><div class="engine-light"></div><div><b>Audio Engine online</b><span>FFmpeg + Open Cloud API</span></div></div><div class="sidebar-help"><span>✦</span><p>Seu som, sem complicação.<br/>Controle total do pipeline.</p></div><span class="sidebar-version">NAPLES STUDIO <span>V 11.0</span></span></div>
 </aside>
 <main class="main-content" id="dashboard">
 <header class="topbar"><div class="topbar-location"><span class="v24-pulse">✦</span> <strong>PAINEL NAPLES STUDIOS</strong></div><div class="topbar-right"><span class="connection"><i></i> SECURE SESSION</span><button aria-label="Atualizar histórico" class="round-action" id="refreshBtn" title="Atualizar" type="button">↻</button><div class="profile"><div class="user-avatar" id="userAvatar">N</div><div class="profile-name"><b id="userName">—</b><span id="planLabel">Discord conectado</span></div></div><button class="signout" id="logoutBtn" type="button">Sair ↗</button></div></header>
-<div class="v7-mobile-nav"><a href="#dashboard">Visão geral</a><a href="#studio">Enviar música</a><a href="#batch">Upload em massa</a><a href="#images">Upload de imagem</a><a href="#history">Histórico</a><a href="#collections">Coleções</a><a href="#roblox-key">Roblox Key</a><a href="#monitor">Monitor de IDs</a><a href="#quality">Qualidade do áudio</a></div><div class="content-wrap">
+<div class="v7-mobile-nav"><a href="#dashboard">Visão geral</a><a href="#studio">Enviar música</a><a href="#batch">Upload em massa</a><a href="#images">Upload de imagem</a><a href="#history">Histórico</a><a href="#collections">Coleções</a><a href="#roblox-key">Roblox Key</a><a href="#monitor">Monitor de IDs</a><a href="#quality">Qualidade do áudio</a><a href="#admin-users" data-admin-nav hidden>Administração</a></div><div class="content-wrap">
 <section class="v24-page" data-v24-page="dashboard" id="overview">
 <div class="v24-overview-heading"><span class="v24-kicker">✦ PAINEL NAPLES STUDIOS</span><h1>Seu painel de áudio para Roblox</h1><p>Gerencie uploads, coleções, IDs e outros recursos em um só lugar.</p></div>
 <div class="v24-metrics">
@@ -173,6 +174,23 @@ Nome de teste | https://www.youtube.com/watch?v=ID" rows="7" spellcheck="false">
 <div class="v24-image-help"><div class="surface flow-panel"><div class="flow-title">COMO FUNCIONA</div><div class="steps"><div class="flow-step"><span class="step-num">01</span><div class="step-content"><b>Selecione um arquivo</b><p>PNG transparente ou JPG, até 10 MB.</p></div></div><div class="flow-step"><span class="step-num">02</span><div class="step-content"><b>Envio pela Open Cloud</b><p>Usa seu destino pessoal definido em Roblox Key.</p></div></div><div class="flow-step last"><span class="step-num">03</span><div class="step-content"><b>Copie o Asset ID</b><p>Use rbxassetid://SEU_ID no Roblox Studio, quando disponível.</p></div></div></div></div></div>
 </div>
 <div class="v24-panel v24-image-history"><div class="v24-recent-head"><div><h2>Histórico de imagens</h2><p>Assets publicados pela sua conta.</p></div><button class="secondary-btn" id="imageRefresh" type="button">↻ Atualizar</button></div><div class="v24-image-job-list" id="imageJobList"><p class="v7-muted">Nenhuma imagem enviada ainda.</p></div></div>
+</section>
+<section id="naplesAdminPanel" data-v24-page="admin-users" class="naples-admin-page" hidden>
+  <div class="naples-admin-header"><div><span class="naples-admin-overline">◆ NAPLES STUDIOS / RESTRITO</span>
+    <h1>Administração de usuários</h1><p>Gerencie logins Discord, pagamentos Pix, acessos gratuitos e banimentos. Somente o proprietário pode alterar permissões.</p>
+  </div><button id="adminRefresh" class="naples-admin-refresh" type="button">↻ Atualizar</button></div>
+  <div class="naples-admin-metrics">
+    <div class="naples-admin-metric"><small>Usuários cadastrados</small><strong id="adminTotal">—</strong></div>
+    <div class="naples-admin-metric"><small>Nesta página</small><strong id="adminCountShown">—</strong></div>
+    <div class="naples-admin-metric"><small>Banidos nesta página</small><strong id="adminBanned">—</strong></div>
+  </div>
+  <section class="naples-admin-surface"><div class="naples-admin-toolbar"><h2>Contas Discord</h2>
+    <form id="adminSearchForm"><input id="adminSearch" type="search" maxlength="100" autocomplete="off" placeholder="Pesquisar usuário ou Discord ID" aria-label="Pesquisar usuário ou Discord ID"/><button type="submit">Pesquisar</button></form></div>
+    <p id="adminFeedback" role="status" aria-live="polite" class="naples-admin-feedback">Carregue a lista para consultar o histórico.</p>
+    <div id="adminUsersList" class="naples-admin-list"></div>
+    <div class="naples-admin-pagination"><button type="button" id="adminPrev">← Anterior</button><span id="adminPageNumber">Página 1</span><button type="button" id="adminNext">Próxima →</button></div>
+  </section>
+  <section class="naples-admin-surface"><h2>Últimas alterações de acesso</h2><div id="adminAudit" class="naples-admin-events"></div></section>
 </section></div>
 </main>
 </div>

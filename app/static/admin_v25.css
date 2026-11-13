@@ -1,0 +1,50 @@
+/* Naples Studios v25 — apenas visual da área administrativa. */
+#appView [data-admin-nav][hidden],
+#appView #naplesAdminPanel[hidden]{display:none!important}
+#appView .naples-admin-page{max-width:1600px}
+#appView .naples-admin-header{display:flex;gap:12px;justify-content:space-between;align-items:center;margin-bottom:20px}
+#appView .naples-admin-header h1{font-size:clamp(23px,3vw,33px);color:#f6faff;margin:4px 0}
+#appView .naples-admin-header p{color:#a6b8cb;font-size:13px;line-height:1.5}
+#appView .naples-admin-overline{color:#35eb9e;font-size:11px;letter-spacing:2px;font-weight:850}
+#appView .naples-admin-refresh{border:1px solid #2f9f7a;background:#104533;color:#c4ffe7;border-radius:9px;padding:12px 17px;font-weight:850;cursor:pointer}
+#appView .naples-admin-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:20px 0}
+#appView .naples-admin-metric{background:#101c31;border:1px solid #293b56;border-radius:13px;padding:20px}
+#appView .naples-admin-metric small{color:#a7b8d0;display:block;font-size:11px}
+#appView .naples-admin-metric strong{color:#eff9ff;font-size:30px;display:block;margin-top:8px}
+#appView .naples-admin-surface{background:#101c31;border:1px solid #293b56;border-radius:14px;padding:clamp(14px,2vw,25px);margin-bottom:20px}
+#appView .naples-admin-toolbar{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:18px}
+#appView .naples-admin-toolbar h2{color:#f5f9ff;font-size:18px}
+#appView .naples-admin-toolbar form{display:flex;gap:8px;align-items:center}
+#appView .naples-admin-toolbar input{background:#0c1528;border:1px solid #354967;border-radius:9px;padding:11px;color:#f7ffff;min-width:min(320px,60vw)}
+#appView .naples-admin-toolbar form button{background:#20dc91;border:0;border-radius:8px;padding:12px 16px;color:#042519;font-weight:900;cursor:pointer}
+#appView .naples-admin-list{display:grid;gap:12px}
+#appView .naples-admin-user{border:1px solid #2b4059;border-radius:12px;background:#121f35;padding:17px;display:grid;gap:11px}
+#appView .naples-admin-identity{display:flex;gap:12px;align-items:center;min-width:0}
+#appView .naples-admin-avatar{height:43px;width:43px;flex:0 0 43px;border-radius:13px;background:#14543b;color:#63f5bd;display:grid;place-items:center;font-weight:900;overflow:hidden}
+#appView .naples-admin-avatar img{width:100%;height:100%;object-fit:cover}
+#appView .naples-admin-identity strong{display:block;color:#eef8fe;font-size:15px;overflow-wrap:anywhere}
+#appView .naples-admin-identity small{display:block;color:#97b1c7;font-size:11px;margin-top:5px}
+#appView .naples-admin-badges{display:flex;gap:7px;flex-wrap:wrap}
+#appView .naples-admin-tag{color:#b3c7d6;background:#213249;border:1px solid #344962;border-radius:999px;padding:5px 9px;font-size:11px;font-weight:750}
+#appView .naples-admin-tag.good{color:#64f8b1;background:#0c3c2a;border-color:#2c7d59}
+#appView .naples-admin-tag.warn{color:#ffbbc5;background:#462632;border-color:#885062}
+#appView .naples-admin-meta{display:flex;gap:8px 22px;flex-wrap:wrap;color:#a2b9ce;font-size:11px}
+#appView .naples-admin-actions{display:flex;flex-wrap:wrap;gap:8px}
+#appView .naples-admin-btn{border:1px solid #268b68;background:#124a37;color:#dcfff0;border-radius:8px;padding:9px 11px;font-size:11px;font-weight:850;cursor:pointer}
+#appView .naples-admin-btn.danger{border-color:#995164;background:#46212f;color:#ffd1d6}
+#appView .naples-admin-btn:disabled{opacity:.35;cursor:not-allowed}
+#appView .naples-admin-pagination{display:flex;gap:14px;align-items:center;justify-content:flex-end;color:#acbed2;margin-top:17px;font-size:12px}
+#appView .naples-admin-pagination button{border:1px solid #375572;border-radius:8px;background:#192b43;color:#e6f5ff;padding:9px 13px;cursor:pointer}
+#appView .naples-admin-pagination button:disabled{opacity:.35}
+#appView .naples-admin-feedback{color:#a6ddc9;font-size:12px;min-height:20px}
+#appView .naples-admin-feedback.bad{color:#ffa5b2}
+#appView .naples-admin-events{display:grid;gap:9px;margin-top:13px}
+#appView .naples-admin-event{background:#14243a;border:1px solid #273a52;border-radius:8px;padding:11px 14px;color:#bcd3e3;font-size:12px}
+#appView .naples-admin-empty{color:#b9cbd7;padding:25px;text-align:center}
+@media(max-width:680px){
+ #appView .naples-admin-metrics{grid-template-columns:1fr 1fr}
+ #appView .naples-admin-toolbar{align-items:stretch;flex-direction:column}
+ #appView .naples-admin-toolbar form{width:100%}
+ #appView .naples-admin-toolbar input{min-width:0;width:100%}
+ #appView .naples-admin-actions button{flex:1 1 140px}
+}

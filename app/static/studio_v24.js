@@ -2,18 +2,19 @@
 /* Interface v24: navegação SPA por páginas, usando os endpoints antigos de áudio. */
 (() => {
   const $ = id => document.getElementById(id);
-  const pages = new Set(['dashboard','studio','batch','images','history','collections','roblox-key','monitor','quality']);
+  const pages = new Set(['dashboard','studio','batch','images','history','collections','roblox-key','monitor','quality','admin-users']);
   let csrf = '';
+  let allowAdmin = false;
   let enabled = false;
   let imagePolling = null;
   let imagePreviewUrl = null;
   let uploading = false;
   let previousImageJobs = [];
-  const pageNames = {dashboard:'VISÃO GERAL',studio:'ENVIAR MÚSICA',batch:'UPLOAD EM MASSA',images:'UPLOAD DE IMAGEM',history:'HISTÓRICO',collections:'COLEÇÕES','roblox-key':'ROBLOX KEY',monitor:'MONITOR DE IDS',quality:'QUALIDADE DO ÁUDIO'};
+  const pageNames = {dashboard:'VISÃO GERAL',studio:'ENVIAR MÚSICA',batch:'UPLOAD EM MASSA',images:'UPLOAD DE IMAGEM',history:'HISTÓRICO',collections:'COLEÇÕES','roblox-key':'ROBLOX KEY',monitor:'MONITOR DE IDS',quality:'QUALIDADE DO ÁUDIO','admin-users':'ADMINISTRAÇÃO'};
 
   function route(){
     const page = (location.hash || '#dashboard').slice(1);
-    const active = pages.has(page) ? page : 'dashboard';
+    const active = pages.has(page) && (page !== 'admin-users' || allowAdmin) ? page : 'dashboard';
     document.querySelectorAll('[data-v24-page]').forEach(node => {
       node.hidden = node.dataset.v24Page !== active;
     });
@@ -37,6 +38,9 @@
   function start(config){
     csrf = config.csrf;
     enabled = true;
+    allowAdmin = config.admin_panel === true;
+    document.querySelectorAll('[data-admin-nav]').forEach(a=>{a.hidden=!allowAdmin;});
+    window.NaplesAdmin?.start({csrf, isAdmin: allowAdmin});
     const b = config.billing || {};
     $('v24PlanName').textContent = b.owner_lifetime || b.lifetime ? 'Vitalício' : (b.active ? 'Ativo' : 'Sem plano');
     $('v24PlanDetail').textContent = b.owner_lifetime || b.lifetime ? 'Acesso sem mensalidade' : (b.active ? 'Acesso liberado' : 'Verifique sua assinatura');

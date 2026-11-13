@@ -93,7 +93,7 @@ function showLogin(){
   $('billingView').hidden=true;
   $('loginView').hidden=false;
   const msg=new URLSearchParams(location.search).get('login_error');
-  const texts={cancelado:'Login cancelado. Autorize o acesso no Discord para continuar.',discord:'Falha ao validar a autenticação no Discord. Tente novamente.',acesso:'Acesso não permitido. Sua conta pode estar suspensa ou o cadastro público foi desativado.',config:'O Discord OAuth2 ainda não foi configurado no servidor. O proprietário precisa cadastrar a aplicação uma única vez.'};
+  const texts={cancelado:'Login cancelado. Autorize o acesso no Discord para continuar.',discord:'Falha ao validar a autenticação no Discord. Tente novamente.',acesso:'Acesso não permitido. Sua conta pode estar suspensa ou o cadastro público foi desativado.',config:'O Discord OAuth2 ainda não foi configurado no servidor. O proprietário precisa cadastrar a aplicação uma única vez.',banido:'ACESSO BLOQUEADO. Sua conta Discord foi banida permanentemente do Naples Studios. Se acredita que houve um erro, contate a administração.'};
   $('loginError').textContent=texts[msg]||'';
   $('loginError').hidden=!texts[msg];
 }
@@ -329,7 +329,7 @@ async function init(){
       return;
     }
     showApp(result.user,result.config,result.billing);
-    window.NaplesV24?.start({csrf:result.csrf,user:result.user,config:result.config,billing:result.billing});
+    window.NaplesV24?.start({csrf:result.csrf,user:result.user,config:result.config,billing:result.billing,admin_panel:result.admin_panel===true});
     await fetchJobs();
     await Promise.all([fetchCollections(),loadConnection()]);
     if(!result.config.roblox_connected && !sessionStorage.getItem('naples-key-tip')){sessionStorage.setItem('naples-key-tip','1');location.hash='#roblox-key';toast('Bem-vindo! Conecte sua Roblox Key para começar a publicar.');}
