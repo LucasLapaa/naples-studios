@@ -62,6 +62,19 @@ def access_info(discord_id: str, now=None) -> dict:
     if discord_id == OWNER_DISCORD_ID:
         return {'enabled': enabled(), 'active': True, 'lifetime': True, 'expires_at': None,
                 'price_brl': '50.00', 'configured': configured()}
+    # Acesso concedido exclusivamente pelo painel do proprietário.
+    # Não interfere nos pagamentos confirmados pelo Mercado Pago.
+    from . import admin_users
+    with db.connect() as conn:
+        manual = conn.execute('''SELECT grant_type,expires_at FROM admin_access_grants
+            WHERE discord_id=?''', (discord_id,)).fetchone()
+    if manual and manual['grant_type'] == 'lifetime':
+        return {'enabled': enabled(), 'active': True, 'lifetime': True,
+                'expires_at': None, 'price_brl': '50.00', 'configured': configured(),
+                'grant_type': 'lifetime'}
+    manual_until = (int(manual['expires_at']) if manual and
+                    manual['grant_type'] == '30days' and manual['expires_at'] and
+                    int(manual['expires_at']) > now else None)
     if not enabled():
         return {'enabled': False, 'active': True, 'lifetime': False, 'expires_at': None,
                 'price_brl': '50.00', 'configured': configured()}
@@ -69,9 +82,11 @@ def access_info(discord_id: str, now=None) -> dict:
         row = conn.execute('''SELECT MAX(ends_at) AS until_at FROM billing_entitlements
             WHERE discord_id=? AND revoked_at IS NULL AND starts_at <= ? AND ends_at > ?''',
             (discord_id, now, now)).fetchone()
-    expiry = row['until_at'] if row else None
+    expiry = max((int(t) for t in (row['until_at'] if row else None, manual_until)
+                  if t and t > now), default=None)
     return {'enabled': True, 'active': bool(expiry), 'lifetime': False,
-            'expires_at': expiry, 'price_brl': '50.00', 'configured': configured()}
+            'expires_at': expiry, 'price_brl': '50.00', 'configured': configured(),
+            'grant_type': '30days' if manual_until else None}
 
 
 def _headers(idempotency=None):

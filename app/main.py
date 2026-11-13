@@ -19,7 +19,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, Response, Uploa
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import config, database as db, settings_store as store, provider_guard, billing, image_upload
+from . import config, database as db, settings_store as store, provider_guard, billing, image_upload, admin_users
 from .asset_monitor import inspect_asset
 from .audio_audit import audit_audio, AudioAuditError
 from .roblox_key import inspect_key, KeyInspectionError, allowed_destination
@@ -129,6 +129,7 @@ async def run_job(*args):
 async def lifespan(app: FastAPI):
     db.initialize()
     billing.init_db()
+    admin_users.initialize()
     image_upload.initialize()
     store.initialize()
     config.reload_settings()
@@ -442,6 +443,8 @@ async def admin_suspend_user(discord_id: str, request: Request):
     if not isinstance(payload, dict) or not isinstance(payload.get('suspended'), bool):
         raise HTTPException(400, 'Informe suspended como true ou false.')
     suspended = bool(payload['suspended'])
+    if suspended and admin_users.owner(discord_id):
+        raise HTTPException(403, 'O proprietário não pode ser banido.')
     with db.connect() as conn:
         result = conn.execute('UPDATE discord_users SET suspended=? WHERE discord_id=?', (int(suspended),discord_id))
         if not result.rowcount: raise HTTPException(404, 'Usuário não encontrado.')
@@ -524,7 +527,7 @@ async def discord_callback(request: Request, code: str = '', state: str = '', er
     with db.connect() as conn:
         db.prune(conn)
         if db.user_suspended(conn, discord_id):
-            return RedirectResponse('/?login_error=acesso', status_code=303)
+            return RedirectResponse('/?login_error=banido', status_code=303)
         db.upsert_discord_user(conn, discord_id, username, avatar)
         conn.execute('''INSERT INTO sessions (token_hash,discord_id,username,avatar_url,csrf_token_hash,created_at,expires_at)
                       VALUES (?,?,?,?,?,?,?)''',
@@ -662,6 +665,53 @@ async def billing_webhook(request: Request):
     return {'ok': True}
 
 
+# ---------------------------------------------------------------------------
+# Administração por Discord OAuth (não é a senha legada /configuracoes).
+# Autorização revalidada no servidor para CADA ação.
+# ---------------------------------------------------------------------------
+
+def require_owner_discord(request: Request, mutate=False):
+    user = require_session(request, mutate=mutate)
+    if not admin_users.owner(user['discord_id']):
+        raise HTTPException(403, 'Área exclusiva do administrador.')
+    return user
+
+
+@app.get('/api/admin-panel/users')
+def owner_list_users(request: Request, q: str = '', page: int = 1):
+    require_owner_discord(request)
+    rate('owner-list:' + request.cookies.get(config.SESSION_COOKIE, '')[-12:], 80, 60)
+    return admin_users.list_users(query=q, page=page)
+
+
+@app.put('/api/admin-panel/users/{discord_id}/access')
+async def owner_set_access(discord_id: str, request: Request):
+    user = require_owner_discord(request, mutate=True)
+    rate('owner-actions:' + user['discord_id'], 50, 600)
+    data = await request.json()
+    kind = data.get('grant_type') if isinstance(data, dict) else None
+    try:
+        return {'ok': True, **admin_users.grant(discord_id, kind, user['discord_id'])}
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+
+@app.put('/api/admin-panel/users/{discord_id}/ban')
+async def owner_set_ban(discord_id: str, request: Request):
+    user = require_owner_discord(request, mutate=True)
+    rate('owner-actions:' + user['discord_id'], 50, 600)
+    data = await request.json()
+    suspended = data.get('suspended') if isinstance(data, dict) else None
+    try:
+        return {'ok': True, **admin_users.ban(discord_id, suspended, user['discord_id'])}
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+
 @app.get('/api/session')
 def session(request: Request):
     user = require_session(request)
@@ -671,6 +721,7 @@ def session(request: Request):
     # usando HMAC estável a partir de token de cookie e um segredo de aplicação no servidor.
     return {
         'authenticated': True,
+        'admin_panel': admin_users.owner(user['discord_id']),
         'billing': subscription,
         'user': {'id': user['discord_id'], 'username': user['username'], 'avatar_url': user['avatar_url']},
         'csrf': derive_csrf(request.cookies[config.SESSION_COOKIE]),
