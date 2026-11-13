@@ -4,11 +4,11 @@
   "rewrites": [
     {
       "source": "/",
-      "destination": "https://naples-studios-production.up.railway.app/"
+      "destination": "https://api.naplestudios.cloud/"
     },
     {
       "source": "/:path*",
-      "destination": "https://naples-studios-production.up.railway.app/:path*"
+      "destination": "https://api.naplestudios.cloud/:path*"
     }
   ]
 }
